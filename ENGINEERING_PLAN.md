@@ -202,49 +202,10 @@ Rules for every seat:
 | **Archivist** | Rules only from signed decisions; shadow status by default; decay | Draft the rule text from the clinician's decision | Knowledge proposals awaiting confirmation |
 | **Chief of Staff** | Rule pass that extracts refusals and gates (safety floor); schema validation; diff | Turn the job description into a full manifest draft (structured output) | Manifest version awaiting Director approval |
 
-### 3.6 Contracts (frozen in Phase 0)
 
-| Contract | Content | Change policy |
-|---|---|---|
-| **C1 Manifest** | seat, location, model, skills, tools, surfaces, memory R/W, refuses, gates, a2a_peers, artifact, unit, job_description | Semver; any change to refuses / gates needs clinical sign-off |
-| **C2 A2A messages** | The 10 types, each with a JSON Schema, envelope (id, from, to, patient, correlation, idempotency key, timestamp) and Ed25519 signature | Semver; golden fixtures per type |
-| **C3 Policy catalogue** | Refusal → blocked actions + content classes; gates → signer role; surfaces → tools | Clinically owned; every entry has a test proving it blocks |
-| **C4 CT service API** | `POST /classify {study_uid}` → `{label, p_raw, p_calibrated, heatmap_ref, cam_metrics, quality, model_version}` | Versioned with the model |
-| **C5 Release** | Signed by the clinician's key, bound to their identity, references the artifact hash and version | Fixed |
-| **C6 MCP tool schemas** | Input / output schema of every tool on every server | Versioned per server |
-
-### 3.7 Main flows
-
-**Patient message (any content)**
-
-```mermaid
-sequenceDiagram
-  participant P as Patient
-  participant G as Gateway
-  participant C as Companion
-  participant D as Dispatcher
-  participant S as Specialist seats
-  participant B as Case Briefer / Board
-  P->>G: text / voice note / photo
-  G->>C: normalised input (transcript, OCR, features)
-  C->>C: extract structured findings (model) + red-flag rules + fuzzy distress
-  alt red flag (rules OR model)
-    C->>P: fixed safety script
-    C->>D: red_flag_escalation
-    D->>D: page on-call, start escalation timer
-  else routine
-    C->>D: symptom_report / medication_report
-    C->>P: acknowledgement reply (policy-checked)
-  end
-  D->>S: route by type
-  S->>D: therapy_conflict / data_request / imaging_signal
-  D->>B: after Safety Verifier
-  B->>B: case pack, gate opened for the right clinician role
-```
 
 **Clinician decision:** the clinician opens the case pack on the Board → edits → re-authenticates and signs → the gate service stores a signed release → the Case Briefer emits `clinician_decision` → the Companion explains it in the patient's language (content guard checks the release) → the Archivist drafts rules in shadow mode → the clinician confirms.
 
-**New imaging study:** PACS notifies (DICOMweb poll or Orthanc webhook) → Imaging Reader → CT service → `imaging_signal` → Safety Verifier → Case Briefer (with genomic context) → radiologist gate. If the patient asks before release, the Companion can only say the images are being reviewed.
 
 ### 3.8 Data model (core tables)
 
@@ -274,21 +235,6 @@ sequenceDiagram
 - Threat model covering prompt injection through patient messages and documents: the policy enforcement point, not the prompt, is the boundary; adversarial tests in CI.
 
 ---
-
-## 4. Implementation plan
-
-**Chosen team: 4 people, 10 working weeks.** (The 2-developer option would take about 16 weeks for the same scope.)
-
-| Role | Code | Owns |
-|---|---|---|
-| **Platform engineer** (tech lead) | BE | Contracts, seat runtime, policy enforcement point, A2A bus, Dispatcher, gate service, Cortex, control plane, Chief of Staff |
-| **ML engineer** | ML | Model serving, model gateway, CT service, media service (speech, OCR, voice/face features), extraction and red-flag models, de-identification, evaluation harness |
-| **Full-stack / front-end engineer** | FE | Web app (Clinical Board, Director console, Roster, Agent page, A2A stream, Memory), API gateway, identity and roles |
-| **Integration and DevOps engineer** | INT | Edge-node infrastructure, CI/CD, migrations, sandboxes, synthetic data, MCP servers, channels (Telegram / WhatsApp), paging, rule-based clinical seats |
-
-Plus a **clinical lead** (nephrologist), about 0.5 day a week in Phases 0–1 and 1–2 days a week from Phase 2 on. Estimates are indicative.
-
-The Phase 0 tickets, per person, are in [PHASE0_TICKETS.md](PHASE0_TICKETS.md).
 
 ### Phase 0: Foundations
 
@@ -367,109 +313,3 @@ The Phase 0 tickets, per person, are in [PHASE0_TICKETS.md](PHASE0_TICKETS.md).
 | Security review and penetration test | Findings fixed |
 | Clinical validation with the clinical lead on synthetic + retrospective cases | Written sign-off |
 | Regulatory groundwork: DPIA (GDPR / Law 09-08), EU AI Act high-risk file, IEC 62304 lifecycle, MDR classification of red-flag triage and imaging support, hazard log | Documents ready for a pilot decision |
-
-### Timeline (4 people)
-
-Start Monday 2026-10-26. Ten working weeks, with the holiday break (2026-12-21 → 2027-01-01) left out, so the plan ends on **2027-01-15**. Phases 2 and 3 run in parallel, and so do Phases 4, 5 and 6.
-
-| Week | Dates | BE (platform) | ML | FE (full-stack) | INT (integration / DevOps) |
-|---|---|---|---|---|---|
-| 1–2 | Oct 26 – Nov 6 | **P0** contracts, signing, bus, seat runtime, policy enforcement, audit | **P0** model serving, gateway, v1 CT intake, CT service skeleton, eval harness | **P0** web scaffold, identity, API gateway, live stream view, Board wireframes | **P0** edge stack, CI, migrations, synthetic data, KiTS19, first MCP server |
-| 3–4 | Nov 9 – Nov 20 | **P1** Cortex stores, KM rule tables, Dispatcher routing | **P1** KM retrieval index, CT preprocessing + Grad-CAM on DICOM | **P1** evidence viewers (CT + heat map, labs chart, DNA) on sandbox data | **P1** all MCP servers, Synthea cohort, seed scripts |
-| 5–7 | Nov 23 – Dec 11 | **P2** Companion seat: interview policy, reply generation, content guard, release check | **P2 + P3** media service, extraction, red-flag model, CT calibration + OOD, de-identification | **P3/P4** review queue, case pack editor, signing flow | **P2 + P3** Telegram / WhatsApp, Renal Guardian, Genomics Interpreter, Imaging Reader trigger |
-| 8 | Dec 14 – Dec 18 | **P4** gate service, escalation ladder | **P3** Safety Verifier, Case Briefer generation | **P4** gates on the Board, A2A stream + audit views | **P4** on-call rota, paging |
-| — | Dec 21 – Jan 1 | *holiday break* | | | |
-| 9 | Jan 4 – Jan 8 | **P5** Chief of Staff compiler, manifest lifecycle, Archivist | **P6** voice and face features → fuzzy distress | **P5** Director console, Agent page (diff + approve), Roster, Memory panel | **P6** wearables integration; **P7** load-test setup |
-| 10 | Jan 11 – Jan 15 | **P7** failure tests, security fixes | **P7** full evaluation run, adversarial suite | **P7** end-to-end UI tests, accessibility | **P7** load tests, penetration-test support, release |
-
-```mermaid
-gantt
-  dateFormat  YYYY-MM-DD
-  title Kidney Care Desk, real system (4 people)
-  excludes weekends
-  section All
-  P0 Foundations              :p0, 2026-10-26, 2026-11-06
-  P1 Data and tools           :p1, 2026-11-09, 2026-11-20
-  section Seats
-  P2 Companion                :p2, 2026-11-23, 2026-12-11
-  P3 Clinical seats           :p3, 2026-11-23, 2026-12-18
-  section Humans in the loop
-  P4 Board, gates, Dispatcher :p4, 2026-12-07, 2026-12-18
-  Holiday break               :crit, hb, 2026-12-21, 2027-01-01
-  P5 Chief of Staff, learning :p5, 2027-01-04, 2027-01-08
-  P6 Humanized, on-device     :p6, 2027-01-04, 2027-01-08
-  section Readiness
-  P7 Evaluation and hardening :p7, 2027-01-08, 2027-01-15
-```
-
-**Schedule risk:** Phases 5 and 6 get one week each in this plan, so they are the tightest. If anything slips, the on-device Companion client (Phase 6) moves after 2027-01-15 first, because a first pilot doesn't need it.
-
-### Milestones
-
-| Milestone | What it proves |
-|---|---|
-| **M1, end of P1** | Platform, bus, policy enforcement and all hospital data reachable through MCP |
-| **M2, end of P2** | A real conversation on a phone, any phrasing, red flags caught and escalated |
-| **M3, end of P4** | All three deck scenarios work for patients they were not scripted for, with real signatures on the Board |
-| **M4, end of P5** | The Director changes the desk in plain language; the desk learns from confirmed decisions |
-| **M5, end of P7** | Measured, secured and documented: ready for a pilot decision |
-
----
-
-## 5. Evaluation and quality
-
-A real clinical agent system is only as good as its measurements. Every seat ships with a dataset and a threshold, and CI blocks a regression.
-
-| Seat / area | Metric | Target (initial) |
-|---|---|---|
-| Companion red flags | Recall on critical patterns / precision | ≥ 0.98 / ≥ 0.70 |
-| Companion extraction | F1 on symptoms, drugs, severity | ≥ 0.90 |
-| Content guard | Leaks of unreleased imaging / diagnosis / dose | 0 |
-| Renal Guardian | Agreement with the clinician table on conflicts | ≥ 0.95 |
-| Imaging Reader | AUROC, calibration error (ECE), OOD detection | Reported per model version; ECE ≤ 0.05 |
-| Safety Verifier | De-identification recall on PHI test set | ≥ 0.99 |
-| Case Briefer | Claims with valid evidence links; clinician rating | 100% linked; ≥ 4/5 |
-| Chief of Staff | Valid manifests; refusals preserved | 100% / 100% |
-| Platform | Messages lost under failure injection | 0 |
-
-Test levels: contract tests, unit tests, seat tests with recorded model outputs, end-to-end scenario tests (including the demo's golden path), adversarial tests, load tests, and clinician review sessions.
-
----
-
-## 6. Non-functional requirements
-
-| Requirement | Target |
-|---|---|
-| Red flag → safety script to the patient | p95 under 5 s on the hospital node; under 1 s on device (Phase 6) |
-| Red flag → on-call paged | p95 under 60 s |
-| Routine message → reply | p95 under 10 s |
-| CT study → signal on the Board | under 2 minutes |
-| Availability of the patient channel | 99.5% (edge node + restart policy) |
-| Scale per edge node | 500 enrolled patients, 50 concurrent conversations |
-| Data leaving the perimeter | only stamped de-identified payloads |
-| Audit | every message, tool call, refusal, signature; tamper-evident; retained per hospital policy |
-
----
-
-## 7. Risks
-
-| Risk | Mitigation |
-|---|---|
-| Language model misses a red flag | Rules ∪ model union; recall threshold in CI; fixed safety script; clinician review of the red-flag set |
-| Prompt injection via patient messages or documents | Policy enforcement point outside the model; structured outputs only; adversarial suite |
-| Edge models too weak for some tasks | Seat-level evaluation; LoRA fine-tuning per hospital; optional cloud model for de-identified tasks only |
-| v1 CT model doesn't generalise to new scanners | Quality / OOD check; calibration on local data; signal is always reviewed by a radiologist |
-| Hospital system access (FHIR, PACS) delayed | Sandboxes (HAPI, Orthanc) behind the same MCP interfaces; live adapters swapped in later |
-| Clinical content wrong or outdated | KM rules versioned with citation and reviewer; clinical lead owns the catalogue |
-| Regulatory scope bigger than expected | Phase 7 groundwork early; keep the demo label "research prototype" until classified |
-| Small team, wide scope | Phases ordered so each milestone is usable; Phase 6 is optional for a first pilot |
-
----
-
-## 8. Decisions needed
-
-1. ~~**Team size**~~ decided: 4 people, 10 working weeks (see section 4).
-2. **Loop platform:** build the runtime as described here, or run the seats on Loop Nexus / Orchestra / Q / Cortex if their APIs are ready? The manifests and contracts are the same either way.
-3. **Models:** which edge models (Loop Q, or open models such as Qwen) and is a cloud model allowed for de-identified tasks?
-4. **Target hospital and jurisdiction:** EU (AI Act + MDR), Morocco (Law 09-08), or both. This fixes the Phase 7 scope.
-5. **Clinical lead:** who reviews the KM, the red-flag set and the case packs, and how many hours a week?
