@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "Section, rule id or URL",
+          "title": "Ref",
+          "type": "string"
+        },
+        "source": {
+          "description": "Guideline or rule source, e.g. 'KDIGO 2024'",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "ref"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "message",
+            "observation",
+            "study",
+            "document",
+            "variant",
+            "series"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "minItems": 1,
+      "title": "Citations",
+      "type": "array"
+    },
+    "condition": {
+      "title": "Condition",
+      "type": "string"
+    },
+    "drug": {
+      "title": "Drug",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceRef"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "explanation": {
+      "title": "Explanation",
+      "type": "string"
+    },
+    "options": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Options",
+      "type": "array"
+    },
+    "rule_id": {
+      "title": "Rule Id",
+      "type": "string"
+    },
+    "severity": {
+      "enum": [
+        "contraindicated",
+        "caution",
+        "monitor"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "drug",
+    "condition",
+    "rule_id",
+    "severity",
+    "explanation",
+    "citations"
+  ],
+  "title": "TherapyConflict",
+  "type": "object"
+}

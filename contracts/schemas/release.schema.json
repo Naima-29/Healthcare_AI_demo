@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "artifact_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Artifact Hash",
+      "type": "string"
+    },
+    "artifact_id": {
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "clinician_id": {
+      "title": "Clinician Id",
+      "type": "string"
+    },
+    "content_classes": {
+      "description": "Content classes this release lets seats disclose",
+      "items": {
+        "type": "string"
+      },
+      "title": "Content Classes",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "role": {
+      "title": "Role",
+      "type": "string"
+    },
+    "sig": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sig"
+    },
+    "signed_at": {
+      "format": "date-time",
+      "title": "Signed At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "artifact_id",
+    "artifact_hash",
+    "clinician_id",
+    "role",
+    "content_classes",
+    "signed_at"
+  ],
+  "title": "Release",
+  "type": "object"
+}

@@ -1,0 +1,46 @@
+{
+  "seat": "dispatcher",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "none",
+    "name": "none"
+  },
+  "skills": [],
+  "tools": [
+    "oncall.who_is_on_call",
+    "oncall.page"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0"
+    ],
+    "write": [
+      "L0"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact"
+  ],
+  "gates": [],
+  "a2a_peers": [
+    "companion",
+    "case_briefer",
+    "archivist"
+  ],
+  "consumes": [
+    "case_pack_ready",
+    "acknowledgment"
+  ],
+  "emits": [
+    "acknowledgment"
+  ],
+  "artifact": null,
+  "unit": "operations",
+  "job_description": "Verify, route and acknowledge every message between seats. Page the on-call clinician on red flags and escalate until someone answers. Open review gates for case packs."
+}

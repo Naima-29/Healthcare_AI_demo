@@ -1,0 +1,25 @@
+{
+  "valid": [
+    {
+      "artifact_id": "cp_001",
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "gate_role": "clinician:nephrology",
+      "summary": "NSAID use in CKD 3b"
+    }
+  ],
+  "invalid": [
+    {
+      "artifact_id": "a",
+      "artifact_hash": "md5:abc",
+      "gate_role": "r",
+      "summary": "s"
+    },
+    {
+      "artifact_id": "a",
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "gate_role": "r",
+      "summary": "s",
+      "diagnosis": "free text"
+    }
+  ]
+}

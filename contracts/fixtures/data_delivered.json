@@ -1,0 +1,32 @@
+{
+  "valid": [
+    {
+      "kind": "genomic_context",
+      "items": [
+        {
+          "gene": "VHL",
+          "variant": "c.499C>T",
+          "class": "pathogenic"
+        }
+      ],
+      "citations": [
+        {
+          "source": "ACMG",
+          "ref": "PVS1"
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "kind": "genomic_context",
+      "items": []
+    },
+    {
+      "kind": "gossip",
+      "items": [
+        {}
+      ]
+    }
+  ]
+}

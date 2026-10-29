@@ -1,0 +1,52 @@
+{
+  "seat": "genomics_interpreter",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [],
+  "tools": [
+    "genomics.read_panel",
+    "km.lookup"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0",
+      "L1",
+      "L3"
+    ],
+    "write": [
+      "L0"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact",
+    "no_variant_reclassification"
+  ],
+  "gates": [
+    {
+      "artifact": "genomic_context",
+      "signer_role": "clinician:genetics"
+    }
+  ],
+  "a2a_peers": [
+    "safety_verifier"
+  ],
+  "consumes": [
+    "data_request",
+    "acknowledgment"
+  ],
+  "emits": [
+    "data_delivered"
+  ],
+  "artifact": null,
+  "unit": "genetics",
+  "job_description": "Read the patient's DNA panel against the Knowledge Model's variant classes (ACMG) and send hereditary context to the case pack."
+}

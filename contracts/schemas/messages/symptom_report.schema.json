@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "message",
+            "observation",
+            "study",
+            "document",
+            "variant",
+            "series"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    },
+    "Symptom": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "description": "Internal or SNOMED code",
+          "title": "Code",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "onset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Onset"
+        },
+        "severity": {
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Severity",
+          "type": "integer"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Patient wording that produced this finding",
+          "title": "Source Text"
+        }
+      },
+      "required": [
+        "code",
+        "label",
+        "severity"
+      ],
+      "title": "Symptom",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "channel": {
+      "enum": [
+        "telegram",
+        "whatsapp",
+        "app"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "distress_score": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Distress Score"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceRef"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "language": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Language",
+      "type": "string"
+    },
+    "symptoms": {
+      "items": {
+        "$ref": "#/$defs/Symptom"
+      },
+      "minItems": 1,
+      "title": "Symptoms",
+      "type": "array"
+    }
+  },
+  "required": [
+    "symptoms",
+    "language",
+    "channel"
+  ],
+  "title": "SymptomReport",
+  "type": "object"
+}

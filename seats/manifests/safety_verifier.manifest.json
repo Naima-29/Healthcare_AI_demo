@@ -1,0 +1,53 @@
+{
+  "seat": "safety_verifier",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [],
+  "tools": [
+    "km.lookup",
+    "deid.anonymise",
+    "cloud_llm.complete_deidentified"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0",
+      "L3"
+    ],
+    "write": [
+      "L0"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact"
+  ],
+  "gates": [],
+  "a2a_peers": [
+    "case_briefer",
+    "renal_guardian",
+    "imaging_reader",
+    "genomics_interpreter"
+  ],
+  "consumes": [
+    "therapy_conflict",
+    "imaging_signal",
+    "data_delivered"
+  ],
+  "emits": [
+    "therapy_conflict",
+    "imaging_signal",
+    "data_delivered",
+    "acknowledgment"
+  ],
+  "artifact": null,
+  "unit": "quality",
+  "job_description": "Check every clinical output before it moves on: citations present, values plausible, schema valid, and data de-identified before any cloud call."
+}

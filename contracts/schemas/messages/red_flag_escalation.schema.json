@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "RedFlag": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "detected_by": {
+          "enum": [
+            "rules",
+            "model",
+            "both"
+          ],
+          "title": "Detected By",
+          "type": "string"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        },
+        "rule_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule Id"
+        }
+      },
+      "required": [
+        "code",
+        "detected_by",
+        "evidence"
+      ],
+      "title": "RedFlag",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "flags": {
+      "items": {
+        "$ref": "#/$defs/RedFlag"
+      },
+      "minItems": 1,
+      "title": "Flags",
+      "type": "array"
+    },
+    "safety_script_sent": {
+      "title": "Safety Script Sent",
+      "type": "boolean"
+    },
+    "severity": {
+      "enum": [
+        "critical",
+        "urgent"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "unit": {
+      "description": "Care unit whose on-call rota is paged, e.g. 'nephrology'",
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "flags",
+    "severity",
+    "unit",
+    "safety_script_sent"
+  ],
+  "title": "RedFlagEscalation",
+  "type": "object"
+}

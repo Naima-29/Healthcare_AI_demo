@@ -1,0 +1,31 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "artifact_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Artifact Hash",
+      "type": "string"
+    },
+    "artifact_id": {
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "gate_role": {
+      "description": "Signer role the gate is opened for, e.g. 'clinician:nephrology'",
+      "title": "Gate Role",
+      "type": "string"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "artifact_id",
+    "artifact_hash",
+    "gate_role",
+    "summary"
+  ],
+  "title": "CasePackReady",
+  "type": "object"
+}

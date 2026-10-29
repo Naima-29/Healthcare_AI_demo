@@ -1,0 +1,37 @@
+{
+  "valid": [
+    {
+      "flags": [
+        {
+          "code": "gross_hematuria",
+          "detected_by": "both",
+          "rule_id": "RF-007",
+          "evidence": "blood in urine, dizzy"
+        }
+      ],
+      "severity": "critical",
+      "unit": "nephrology",
+      "safety_script_sent": true
+    }
+  ],
+  "invalid": [
+    {
+      "flags": [],
+      "severity": "critical",
+      "unit": "nephrology",
+      "safety_script_sent": true
+    },
+    {
+      "flags": [
+        {
+          "code": "x",
+          "detected_by": "rules",
+          "evidence": "x"
+        }
+      ],
+      "severity": "meh",
+      "unit": "n",
+      "safety_script_sent": true
+    }
+  ]
+}

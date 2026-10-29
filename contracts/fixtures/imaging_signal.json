@@ -1,0 +1,33 @@
+{
+  "valid": [
+    {
+      "study_uid": "1.2.840.113619.2.55.3",
+      "label": "tumor",
+      "p_raw": 0.91,
+      "p_calibrated": 0.84,
+      "heatmap_ref": "s3://heatmaps/abc.png",
+      "quality": "ok",
+      "model_version": "ct-v1.0.0"
+    }
+  ],
+  "invalid": [
+    {
+      "study_uid": "1",
+      "label": "tumor",
+      "p_raw": 1.2,
+      "p_calibrated": 0.8,
+      "heatmap_ref": "x",
+      "quality": "ok",
+      "model_version": "v"
+    },
+    {
+      "study_uid": "1",
+      "label": "cancer",
+      "p_raw": 0.2,
+      "p_calibrated": 0.2,
+      "heatmap_ref": "x",
+      "quality": "ok",
+      "model_version": "v"
+    }
+  ]
+}

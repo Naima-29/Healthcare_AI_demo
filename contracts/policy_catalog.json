@@ -1,0 +1,129 @@
+{
+  "version": "1.0.0",
+  "surfaces": [
+    "patient_channel",
+    "clinical_board",
+    "director_console"
+  ],
+  "gate_roles": [
+    "clinician:nephrology",
+    "clinician:radiology",
+    "clinician:urology_oncology",
+    "clinician:genetics",
+    "director"
+  ],
+  "tools": {
+    "channel.send_message": {
+      "server": "channel",
+      "surface": "patient_channel"
+    },
+    "fhir.read_patient": {
+      "server": "fhir"
+    },
+    "fhir.read_observations": {
+      "server": "fhir"
+    },
+    "fhir.read_medications": {
+      "server": "fhir"
+    },
+    "fhir.write_medication_request": {
+      "server": "fhir"
+    },
+    "pacs.fetch_study": {
+      "server": "pacs"
+    },
+    "ct.classify": {
+      "server": "ct"
+    },
+    "genomics.read_panel": {
+      "server": "genomics"
+    },
+    "genomics.write_classification": {
+      "server": "genomics"
+    },
+    "wearables.read_series": {
+      "server": "wearables"
+    },
+    "lab.read_results": {
+      "server": "lab"
+    },
+    "km.lookup": {
+      "server": "km"
+    },
+    "oncall.who_is_on_call": {
+      "server": "oncall"
+    },
+    "oncall.page": {
+      "server": "oncall"
+    },
+    "deid.anonymise": {
+      "server": "deid"
+    },
+    "cloud_llm.complete_deidentified": {
+      "server": "cloud_gateway"
+    },
+    "cloud_llm.complete_raw": {
+      "server": "cloud_gateway"
+    },
+    "board.publish_case_pack": {
+      "server": "board",
+      "surface": "clinical_board"
+    },
+    "control_plane.propose_manifest": {
+      "server": "control_plane",
+      "surface": "director_console"
+    },
+    "control_plane.activate_manifest": {
+      "server": "control_plane"
+    }
+  },
+  "refusals": {
+    "no_diagnosis": {
+      "description": "Never state a diagnosis that a clinician has not released.",
+      "release_gated_content": [
+        "diagnosis"
+      ]
+    },
+    "no_prescribing": {
+      "description": "Never prescribe, start, stop or change a dose.",
+      "blocked_tools": [
+        "fhir.write_medication_request"
+      ],
+      "release_gated_content": [
+        "dose"
+      ]
+    },
+    "no_result_disclosure": {
+      "description": "Never tell the patient a result before a clinician releases it.",
+      "release_gated_content": [
+        "imaging_result",
+        "lab_interpretation",
+        "genomic_result"
+      ]
+    },
+    "no_variant_reclassification": {
+      "description": "Report variant classes from the Knowledge Model only; never reclassify.",
+      "blocked_tools": [
+        "genomics.write_classification"
+      ]
+    },
+    "no_identifiable_data_to_cloud": {
+      "description": "Identifiable data never leaves the hospital edge.",
+      "blocked_tools": [
+        "cloud_llm.complete_raw"
+      ]
+    },
+    "no_patient_contact": {
+      "description": "Only the Companion talks to the patient.",
+      "blocked_tools": [
+        "channel.send_message"
+      ]
+    },
+    "no_self_activation": {
+      "description": "A manifest goes live only after the Director approves it.",
+      "blocked_tools": [
+        "control_plane.activate_manifest"
+      ]
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "Refusal": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked_tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocked Tools",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "release_gated_content": {
+          "description": "Content classes the seat may only emit when backed by a valid clinician release",
+          "items": {
+            "type": "string"
+          },
+          "title": "Release Gated Content",
+          "type": "array"
+        }
+      },
+      "required": [
+        "description"
+      ],
+      "title": "Refusal",
+      "type": "object"
+    },
+    "ToolSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "server": {
+          "description": "MCP server that serves the tool",
+          "title": "Server",
+          "type": "string"
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Surface the tool writes to, if any",
+          "title": "Surface"
+        }
+      },
+      "required": [
+        "server"
+      ],
+      "title": "ToolSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "gate_roles": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Gate Roles",
+      "type": "array"
+    },
+    "refusals": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Refusal"
+      },
+      "title": "Refusals",
+      "type": "object"
+    },
+    "surfaces": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Surfaces",
+      "type": "array"
+    },
+    "tools": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ToolSpec"
+      },
+      "title": "Tools",
+      "type": "object"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "refusals",
+    "tools",
+    "surfaces",
+    "gate_roles"
+  ],
+  "title": "PolicyCatalog",
+  "type": "object"
+}

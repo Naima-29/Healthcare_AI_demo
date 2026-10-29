@@ -1,0 +1,71 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "heatmap_ref": {
+      "title": "Heatmap Ref",
+      "type": "string"
+    },
+    "label": {
+      "enum": [
+        "normal",
+        "cyst",
+        "tumor",
+        "stone"
+      ],
+      "title": "Label",
+      "type": "string"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "p_calibrated": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "P Calibrated",
+      "type": "number"
+    },
+    "p_raw": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "P Raw",
+      "type": "number"
+    },
+    "quality": {
+      "enum": [
+        "ok",
+        "low",
+        "out_of_distribution"
+      ],
+      "title": "Quality",
+      "type": "string"
+    },
+    "study_uid": {
+      "title": "Study Uid",
+      "type": "string"
+    },
+    "technical_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Technical Note"
+    }
+  },
+  "required": [
+    "study_uid",
+    "label",
+    "p_raw",
+    "p_calibrated",
+    "heatmap_ref",
+    "quality",
+    "model_version"
+  ],
+  "title": "ImagingSignal",
+  "type": "object"
+}

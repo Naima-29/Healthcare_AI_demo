@@ -1,0 +1,50 @@
+{
+  "seat": "imaging_reader",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [],
+  "tools": [
+    "pacs.fetch_study",
+    "ct.classify"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0",
+      "L1"
+    ],
+    "write": [
+      "L0",
+      "L1"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact"
+  ],
+  "gates": [
+    {
+      "artifact": "imaging_signal",
+      "signer_role": "clinician:radiology"
+    }
+  ],
+  "a2a_peers": [
+    "safety_verifier"
+  ],
+  "consumes": [
+    "acknowledgment"
+  ],
+  "emits": [
+    "imaging_signal"
+  ],
+  "artifact": null,
+  "unit": "radiology",
+  "job_description": "Run the CT model on new kidney studies and report a calibrated signal with a heat map to radiologists only."
+}

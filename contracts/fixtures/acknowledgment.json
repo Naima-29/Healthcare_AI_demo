@@ -1,0 +1,18 @@
+{
+  "valid": [
+    {
+      "ack_of": "6f1c2b7e-3f1a-4d7b-9a0e-1f2d3c4b5a69",
+      "status": "accepted"
+    }
+  ],
+  "invalid": [
+    {
+      "ack_of": "not-a-uuid",
+      "status": "accepted"
+    },
+    {
+      "ack_of": "6f1c2b7e-3f1a-4d7b-9a0e-1f2d3c4b5a69",
+      "status": "ok"
+    }
+  ]
+}
