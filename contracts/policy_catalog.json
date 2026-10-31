@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "surfaces": [
     "patient_channel",
     "clinical_board",
@@ -75,6 +75,21 @@
     },
     "control_plane.activate_manifest": {
       "server": "control_plane"
+    },
+    "pacs.list_studies": {
+      "server": "pacs"
+    },
+    "pacs.write_study": {
+      "server": "pacs"
+    },
+    "board.read_artifact": {
+      "server": "board"
+    },
+    "cortex.confirm_rule": {
+      "server": "cortex"
+    },
+    "model.train_on_patient_data": {
+      "server": "model_ops"
     }
   },
   "refusals": {
@@ -123,6 +138,24 @@
       "description": "A manifest goes live only after the Director approves it.",
       "blocked_tools": [
         "control_plane.activate_manifest"
+      ]
+    },
+    "no_image_alteration": {
+      "description": "Never modify, overwrite or delete an image in PACS.",
+      "blocked_tools": [
+        "pacs.write_study"
+      ]
+    },
+    "no_rule_self_confirmation": {
+      "description": "A trial memory rule goes live only when a clinician confirms it.",
+      "blocked_tools": [
+        "cortex.confirm_rule"
+      ]
+    },
+    "no_patient_data_in_weights": {
+      "description": "Never write patient data into shared model weights; per-patient memory stays erasable.",
+      "blocked_tools": [
+        "model.train_on_patient_data"
       ]
     }
   }

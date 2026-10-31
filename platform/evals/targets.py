@@ -9,7 +9,7 @@ import functools
 import json
 import os
 import urllib.request
-from typing import Callable
+from collections.abc import Callable
 
 from evals import rules_baseline
 
@@ -68,7 +68,8 @@ Classify urgency:
 - "medium": a single red-flag symptom that the care team should review soon.
 - "none": no red flag.
 Negated symptoms ("no blood") do not count. Patients often play symptoms down; judge the facts.
-Answer only with JSON: {"urgency": "none|medium|high", "score": <probability of high, 0..1>, "evidence": [<short strings>]}"""
+Answer only with JSON:
+{"urgency": "none|medium|high", "score": <probability of high, 0..1>, "evidence": [<short strings>]}"""
 
 
 @target("edge_llm", task="red_flag")

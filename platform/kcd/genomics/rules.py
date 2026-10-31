@@ -28,11 +28,11 @@ class VariantRules:
     class_defaults: dict
 
     @classmethod
-    def load(cls, path: str | Path = RULES_PATH) -> "VariantRules":
+    def load(cls, path: str | Path = RULES_PATH) -> VariantRules:
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
     @classmethod
-    def from_dict(cls, d: dict) -> "VariantRules":
+    def from_dict(cls, d: dict) -> VariantRules:
         missing_defaults = [c for c in CLASSIFICATIONS if c not in d.get("class_defaults", {})]
         if missing_defaults:
             raise RulesError(f"class_defaults missing {missing_defaults}")
@@ -82,12 +82,14 @@ def interpret(panel: Panel, rules: VariantRules, context: dict | None = None) ->
             "classification_normalized": v.classification,
             "relevance": rule["relevance"], "actionable": bool(rule.get("actionable", False)),
             "summary": rule["summary"], "implications": texts,
-            "citations": [rules.citations[c] for c in rule.get("citations", [])], "rule_id": rule["id"],
+            "citations": [rules.citations[c] for c in rule.get("citations", [])],
+            "citation_ids": list(rule.get("citations", [])), "rule_id": rule["id"],
         }
         if v.classification == "risk_allele":
             finding["risk_alleles_in_gene"] = risk_alleles.get(v.gene, 0)
         if rule["relevance"] == "filtered":
-            not_reported.append({"gene": v.gene, "variant_id": v.variant_id, "lab_classification": v.classification_raw})
+            not_reported.append({"gene": v.gene, "variant_id": v.variant_id,
+                                 "lab_classification": v.classification_raw})
             continue
         findings.append(finding)
         if rule.get("hereditary_syndrome") and rule["hereditary_syndrome"] not in syndromes:

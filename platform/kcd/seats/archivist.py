@@ -1,134 +1,178 @@
-"""ARCHIVIST: turns signed clinician decisions into Cortex memory (deck slides 20, 24).
+"""ARCHIVIST on kcd_core: signed clinician decisions become Cortex memory (deck slides 20, 24).
 
-Learning loop: seat proposes -> clinician corrects -> Archivist drafts rule -> clinician
-confirms -> rule reused in the next episode.
+Learning loop: seat proposes -> clinician corrects and signs -> Archivist drafts rules ->
+clinician confirms -> rule reused in the next episode.
 
-* Every decision is stored as evidence first; every rule cites that evidence.
-* Rules are proposed in trial (shadow) status and a rule_confirmation gate is opened.
-  The Archivist has no way to confirm: confirmation is a human-only Cortex call.
-* L2 (hospital) rules cite L2 evidence that carries no patient identifiers.
+On a clinician_decision (from the Case Briefer):
+  1. read the released artifact from the Board (tool board.read_artifact)
+  2. verify it: the clinician's Ed25519 release (kcd_core.signing) covers this artifact and hash,
+     and the artifact content hashes to the value in the decision. Anything else is a PolicyViolation.
+  3. store the decision as evidence (L1), then draft trial rules from the artifact's items:
+     patient rules (L2) cite the decision; hospital rules (L3) cite an L3 precedent with no patient id
+  4. for each rule, send case_pack_ready to the Dispatcher, which opens the confirmation gate
+  5. acknowledge to the Dispatcher
+The Archivist can't confirm a rule: Cortex confirm is human-only, and refusal
+no_rule_self_confirmation blocks cortex.confirm_rule in the catalogue.
 """
+
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any
 
-from kcd.contracts import Envelope, validate
-from kcd.cortex import HOSPITAL_PARTITION, Cortex, CortexView
-from kcd.cortex.store import HUMAN_ROLES
-from kcd.seatkit import GateOpener, Manifest, Outbox, Seat
+from kcd_core.audit import content_hash
+from kcd_core.contracts import Envelope, MessageType, Release
+from kcd_core.contracts.messages import Acknowledgment, CasePackReady, ClinicianDecision
+from kcd_core.pep import PolicyViolation
+from kcd_core.runtime import Seat, SeatContext
+from kcd_core.signing import SignatureError, verify_release
+from pydantic import BaseModel, ValidationError
+
+from kcd.cortex import DEFAULT_HOSPITAL, CoreMemory, Cortex
 from kcd.util import sha256_hex
 
-# Decision item code -> rule drafted from it. Items without a template (and without an
-# explicit "rule") are kept as evidence only.
-RULE_TEMPLATES: dict[str, dict] = {
+RULE_ARTIFACT = "knowledge_rule"
+
+# Decision item code -> rule drafted from it. Items without a template (and without an explicit
+# "rule") are kept in the decision evidence only.
+RULE_TEMPLATES: dict[str, dict[str, Any]] = {
     "stop_nsaid": {
-        "layer": 3, "key": "avoid_drug_class:NSAID", "confidence": 0.95,
-        "value": {"instruction": "Avoid NSAIDs (ibuprofen and similar).",
-                  "used_by": ["companion", "renal_guardian"]},
+        "scope": "patient", "key": "avoid_drug_class:NSAID", "confidence": 0.95,
+        "value": {"instruction": "Avoid NSAIDs (ibuprofen and similar).", "used_by": ["companion", "renal_guardian"]},
     },
     "urgent_visit": {
-        "layer": 2, "key": "routing:rcc_red_flag", "confidence": 0.9,
+        "scope": "hospital", "key": "routing:rcc_red_flag", "confidence": 0.9,
         "value": {"pattern": "RCC follow-up + visible haematuria + flank pain >= 7/10",
                   "route_to": "uro_oncologist_on_call"},
     },
 }
 
-# Messages kept as evidence in the patient's partition (no rule is drafted from them).
-EVIDENCE_MESSAGE_TYPES = {"red_flag_escalation", "therapy_conflict", "case_pack_ready"}
 
-DecisionVerifier = Callable[[dict], bool]
+class DraftError(ValueError):
+    pass
 
 
-def default_decision_verifier(payload: dict) -> bool:
-    """Development check. Core replaces it with verification of the clinician's signed release."""
-    signer = str(payload.get("signed_by") or "")
-    return bool(signer.strip()) and not signer.startswith("seat:") and payload.get("role") in HUMAN_ROLES
+def rule_hash(rule: dict[str, Any]) -> str:
+    """The artifact hash the clinician's confirmation release must cover."""
+    return content_hash({k: rule[k] for k in ("id", "layer", "partition", "key", "version", "value", "evidence_ids")})
 
 
 class Archivist(Seat):
-    def __init__(self, cortex: Cortex, outbox: Outbox, gates: GateOpener, *,
-                 manifest: Manifest | None = None, decision_verifier: DecisionVerifier = default_decision_verifier,
-                 hospital: str = HOSPITAL_PARTITION):
-        super().__init__(manifest or Manifest.load("archivist"), outbox, gates)
-        self.memory = CortexView(cortex, self.manifest)
-        self.decision_verifier = decision_verifier
+    seat_id = "archivist"
+
+    def __init__(self, cortex: Cortex, *, hospital: str = DEFAULT_HOSPITAL):
+        self.cortex = cortex
         self.hospital = hospital
 
-    def handle(self, env: Envelope) -> dict | None:
-        if env.type == "clinician_decision":
-            return self._on_decision(env)
-        if env.type in EVIDENCE_MESSAGE_TYPES or (env.type == "data_delivered" and env.payload.get("kind") == "lab"):
-            ev = self.memory.append_evidence(3, env.patient, kind=env.type, source=f"seat:{env.sender}",
-                                             content=env.payload, meta={"message_id": env.id})
-            self.audit("cortex.evidence_append", "allowed", kind=env.type, evidence_id=ev["id"])
-            return {"evidence_id": ev["id"], "proposals": [], "gates": []}
-        return None
+    def memory(self, ctx: SeatContext, patient_id: str) -> CoreMemory:
+        return CoreMemory(self.cortex, ctx, self.seat_id, patient_id, self.hospital)
 
-    def _on_decision(self, env: Envelope) -> dict:
-        validate("clinician_decision", env.payload)
-        p = env.payload
-        if not self.decision_verifier(p):
-            # Without a verified human signature there is no evidence to learn from.
-            raise self.refuse("store_without_evidence", "clinician_decision is not signed by a verified clinician")
-
+    async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
+        if not isinstance(payload, ClinicianDecision):
+            return
+        mem = self.memory(ctx, env.patient_id)
         key = f"decision:{env.id}"
-        previous = self.memory.processed_result(key)
-        if previous is not None:
-            self.audit("clinician_decision", "duplicate_skipped", message_id=env.id)
-            return {**previous, "duplicate": True}
+        if mem.processed_result(key) is not None:
+            return  # a bus redelivery of a message already handled
 
-        # Validate every draft before writing anything, so a bad item can't leave half a decision behind.
-        drafts = [(item, d) for item in p["items"] if (d := self._draft(item)) is not None]
-        for item, d in drafts:
-            if d["layer"] not in (2, 3):
-                raise self.refuse("memory_scope", f"the Archivist does not write L{d['layer']} rules")
+        fetched = await ctx.tool("board.read_artifact", artifact_id=payload.artifact_id)
+        artifact, release = self._verified(fetched, payload, ctx)
 
-        decision_ev = self.memory.append_evidence(
-            3, env.patient, kind="clinician_decision", source=f"clinician:{p['signed_by']}", content=p,
-            meta={"message_id": env.id, "case_id": p["case_id"]})
+        try:
+            drafts = [] if payload.decision == "rejected" else self._drafts(artifact)
+        except DraftError as exc:
+            # A malformed artifact teaches nothing: store nothing, say so to the Dispatcher.
+            await ctx.send(MessageType.ACKNOWLEDGMENT, "dispatcher",
+                           Acknowledgment(ack_of=env.id, status="rejected", reason=str(exc)))
+            mem.mark_processed(key, {"rejected": str(exc)})
+            return
 
-        proposals, gates = [], []
+        decision_ev = mem.append_evidence(
+            kind="clinician_decision", source=f"clinician:{release.clinician_id}",
+            content={"decision": payload.model_dump(mode="json"), "release": release.model_dump(mode="json"),
+                     "artifact": artifact},
+            meta={"message_id": str(env.id)})
+
+        gate_role = next(g.signer_role for g in ctx.manifest.gates if g.artifact == RULE_ARTIFACT)
+        source = f"clinician:{release.clinician_id} ({release.role}) artifact {payload.artifact_id}"
+        rule_ids = []
         for item, draft in drafts:
-            layer = draft["layer"]
-            if layer == 3:
-                partition, evidence_ids = env.patient, [decision_ev["id"]]
-            elif layer == 2:
-                partition = self.hospital
-                precedent = self.memory.append_evidence(2, partition, kind="routing_precedent", content={
-                    "case_ref": sha256_hex(f"{env.patient}:{p['case_id']}")[:16],  # no patient identifier at L2
-                    "item_code": item["code"], "decided_by_role": p.get("role"),
+            note = item.get("clinician_text") or item.get("patient_text")
+            if draft["scope"] == "patient":
+                rule = mem.propose_patient_rule(key=draft["key"], value=draft["value"], confidence=draft["confidence"],
+                                                source=source, evidence_ids=[decision_ev["id"]], note=note)
+            else:
+                precedent = mem.append_hospital_evidence(kind="routing_precedent", content={
+                    "case_ref": sha256_hex(f"{env.patient_id}:{payload.artifact_id}")[:16],  # no patient id at L3
+                    "item_code": item.get("code"), "decided_by_role": release.role,
                     "pattern": draft["value"].get("pattern") if isinstance(draft["value"], dict) else None,
                 })
-                evidence_ids = [precedent["id"]]
-            else:
-                raise self.refuse("memory_scope", f"the Archivist does not write L{layer} rules")
-            rule = self.memory.propose(
-                layer, partition, key=draft["key"], value=draft["value"], confidence=draft["confidence"],
-                source=f"clinician:{p['signed_by']} ({p.get('role')}) case {p['case_id']}",
-                evidence_ids=evidence_ids, note=item.get("clinician_text") or item.get("patient_text"))
-            proposals.append(rule)
-            gates.append(self.open_gate(
-                "rule_confirmation", env.patient,
-                f"Confirm trial rule ({'L2 hospital' if layer == 2 else 'L3 patient'}): {draft['key']}",
-                {"knowledge_id": rule["id"], "layer": layer, "key": rule["key"], "value": rule["value"],
-                 "version": rule["version"], "evidence_ids": rule["evidence_ids"]}))
-            self.audit("cortex.knowledge_propose", "allowed", knowledge_id=rule["id"], key=rule["key"], layer=layer)
+                rule = mem.propose_hospital_rule(key=draft["key"], value=draft["value"], confidence=draft["confidence"],
+                                                 source=source, evidence_ids=[precedent["id"]], note=note)
+            rule_ids.append(rule["id"])
+            await ctx.send(MessageType.CASE_PACK_READY, "dispatcher", CasePackReady(
+                artifact_id=rule["id"], artifact_hash=rule_hash(rule), gate_role=gate_role,
+                summary=f"Confirm trial rule ({draft['scope']}): {rule['key']} v{rule['version']}"))
 
-        result = {"evidence_id": decision_ev["id"], "proposals": [r["id"] for r in proposals], "gates": gates}
-        self.memory.mark_processed(key, 3, env.patient, result)
-        return {**result, "duplicate": False}
+        await ctx.send(MessageType.ACKNOWLEDGMENT, "dispatcher", Acknowledgment(ack_of=env.id, status="accepted"))
+        mem.mark_processed(key, {"evidence_id": decision_ev["id"], "rules": rule_ids})
+
+    def rules_for_next_episode(self, ctx: SeatContext, patient_id: str) -> list[dict[str, Any]]:
+        """Confirmed, still-confident rules for this patient and their hospital."""
+        return self.memory(ctx, patient_id).active_rules()
+
+    # ------------------------------------------------------------------ internals
+    def _verified(self, fetched: Any, decision: ClinicianDecision, ctx: SeatContext) -> tuple[dict, Release]:
+        def block(reason: str) -> PolicyViolation:
+            return PolicyViolation(self.seat_id, "decision", decision.artifact_id, reason)
+
+        if not isinstance(fetched, dict) or not isinstance(fetched.get("artifact"), dict):
+            raise block("board returned no artifact")
+        try:
+            release = fetched.get("release")
+            release = release if isinstance(release, Release) else Release.model_validate(release)
+        except ValidationError as exc:
+            raise block(f"board returned no valid release: {exc.error_count()} error(s)") from exc
+        artifact = fetched["artifact"]
+        if release.id != decision.release_id or release.artifact_id != decision.artifact_id:
+            raise block("release does not match the decision")
+        if release.artifact_hash != decision.artifact_hash or content_hash(artifact) != decision.artifact_hash:
+            raise block("artifact hash does not match the signed release")
+        if release.role != decision.clinician_role:
+            raise block("release role does not match the decision")
+        try:
+            verify_release(release, ctx.pep.clinician_keys)
+        except SignatureError as exc:
+            raise block(f"invalid clinician release: {exc}") from exc
+        return artifact, release
 
     @staticmethod
-    def _draft(item: dict) -> dict | None:
-        explicit = item.get("rule")
-        if explicit is not None:
-            if not isinstance(explicit, dict) or "key" not in explicit or "value" not in explicit:
-                raise ValueError(f"decision item {item.get('code')!r}: rule needs 'key' and 'value'")
-            return {"layer": int(explicit.get("layer", 3)), "key": str(explicit["key"]), "value": explicit["value"],
-                    "confidence": float(explicit.get("confidence", 0.9))}
-        template = RULE_TEMPLATES.get(item["code"])
-        return dict(template) if template else None
-
-    def rules_for_next_episode(self, patient: str) -> list[dict]:
-        """Confirmed, still-confident rules for this patient and their hospital."""
-        return self.memory.active_rules([(3, patient), (2, self.hospital)])
+    def _drafts(artifact: dict) -> list[tuple[dict, dict]]:
+        """Validate every draft before anything is written, so a bad item can't leave half a decision behind."""
+        items = artifact.get("items", [])
+        if not isinstance(items, list):
+            raise DraftError("artifact items must be a list")
+        out = []
+        for i, item in enumerate(items):
+            if not isinstance(item, dict) or not item.get("code"):
+                raise DraftError(f"item {i} needs a code")
+            explicit = item.get("rule")
+            if explicit is not None:
+                if not isinstance(explicit, dict) or not explicit.get("key") or "value" not in explicit:
+                    raise DraftError(f"item {item['code']!r}: rule needs 'key' and 'value'")
+                scope = explicit.get("scope", "patient")
+                if scope not in ("patient", "hospital"):
+                    raise DraftError(f"item {item['code']!r}: scope must be 'patient' or 'hospital'")
+                try:
+                    confidence = float(explicit.get("confidence", 0.9))
+                except (TypeError, ValueError) as exc:
+                    raise DraftError(f"item {item['code']!r}: confidence must be a number") from exc
+                if not 0.0 < confidence <= 1.0:
+                    raise DraftError(f"item {item['code']!r}: confidence must be in (0, 1]")
+                draft = {"scope": scope, "key": str(explicit["key"]), "value": explicit["value"],
+                         "confidence": confidence}
+            elif item["code"] in RULE_TEMPLATES:
+                draft = dict(RULE_TEMPLATES[item["code"]])
+            else:
+                continue
+            out.append((item, draft))
+        return out

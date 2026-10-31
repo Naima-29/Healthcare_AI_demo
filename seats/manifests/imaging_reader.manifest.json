@@ -1,13 +1,20 @@
 {
   "seat": "imaging_reader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "location": "edge",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "provider": "none",
+    "name": "kidney-ct-cls (Person 5), called through ct.classify"
   },
-  "skills": [],
+  "skills": [
+    "fetch_study",
+    "classify",
+    "attention_map",
+    "quality_ood",
+    "calibrate"
+  ],
   "tools": [
+    "pacs.list_studies",
     "pacs.fetch_study",
     "ct.classify"
   ],
@@ -27,7 +34,8 @@
     "no_prescribing",
     "no_result_disclosure",
     "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "no_patient_contact",
+    "no_image_alteration"
   ],
   "gates": [
     {
@@ -44,7 +52,7 @@
   "emits": [
     "imaging_signal"
   ],
-  "artifact": null,
+  "artifact": "imaging_signal",
   "unit": "radiology",
-  "job_description": "Run the CT model on new kidney studies and report a calibrated signal with a heat map to radiologists only."
+  "job_description": "Read the kidney CT as soon as it reaches PACS. Run the classifier and the attention heat map, check image quality and out-of-distribution risk, calibrate the confidence, and return a preliminary imaging signal for the clinicians only, through the Safety Verifier. Never call it a diagnosis, never report anything to the patient, never alter the image. Radiologist review is required."
 }

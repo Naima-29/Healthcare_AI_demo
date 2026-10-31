@@ -1,17 +1,30 @@
 import tempfile
 import threading
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from kcd_core.audit import InMemoryAudit
+from kcd_core.clock import FakeClock
+from kcd_core.contracts import PolicyCatalog, Release
+from kcd_core.pep import PolicyEnforcementPoint, PolicyViolation
+from kcd_core.registry import ManifestRegistry
+from kcd_core.signing import KeyRing, Signer, sign_release
 from sqlalchemy import text, update
 
 from kcd.cortex import (
-    Cortex, CortexView, EvidenceRequired, FileBlobStore, HumanActor, HumanRequired, InvalidTransition,
-    MemoryScopeError, NotFound,
+    CoreMemory,
+    Cortex,
+    EvidenceRequired,
+    FileBlobStore,
+    HumanActor,
+    HumanRequired,
+    InvalidTransition,
+    NotFound,
+    schema,
 )
-from kcd.cortex import schema
-from kcd.seatkit import Manifest
+from kcd.cortex.auth import release_verifier
+from kcd.desk import CATALOG_PATH, MANIFEST_DIR
 
 DR = HumanActor("dr-rossi", "nephrologist")
 DPO = HumanActor("dpo-1", "dpo")
@@ -19,7 +32,7 @@ DPO = HumanActor("dpo-1", "dpo")
 
 class Clock:
     def __init__(self):
-        self.now = datetime(2026, 10, 12, 21, 40, tzinfo=timezone.utc)
+        self.now = datetime(2026, 10, 12, 21, 40, tzinfo=UTC)
 
     def __call__(self):
         return self.now
@@ -256,38 +269,103 @@ class ErasureTest(unittest.TestCase):
         self.assertEqual(c.list_evidence(3, "p1"), [])
 
 
-class ViewTest(unittest.TestCase):
+CATALOG = PolicyCatalog.load(CATALOG_PATH)
+REGISTRY = ManifestRegistry.from_dir(CATALOG, MANIFEST_DIR)
+
+
+def pep_for(seat: str) -> PolicyEnforcementPoint:
+    manifest = REGISTRY.get(seat)
+    return PolicyEnforcementPoint(lambda: manifest, CATALOG, InMemoryAudit(), FakeClock(), KeyRing())
+
+
+class CoreMemoryTest(unittest.TestCase):
+    """CoreMemory asks kcd_core's PEP before every access, with the seat's real manifest."""
+
     def setUp(self):
         self.c = make()
-        self.imaging = CortexView(self.c, Manifest.load("imaging_reader"))
-        self.archivist = CortexView(self.c, Manifest.load("archivist"))
+        self.imaging = CoreMemory(self.c, pep_for("imaging_reader"), "imaging_reader", "p1")
+        self.archivist = CoreMemory(self.c, pep_for("archivist"), "archivist", "p1")
 
     def test_layer_scopes_from_manifest(self):
-        self.imaging.append_evidence(3, "p1", kind="ct", content={})
-        with self.assertRaises(MemoryScopeError):
-            self.imaging.append_evidence(2, "hospital", kind="x", content={})  # imaging writes L3 only
-        with self.assertRaises(MemoryScopeError):
-            self.imaging.list_knowledge(2, "hospital")                      # and reads 0, 1, 3
-        with self.assertRaises(MemoryScopeError):
-            self.imaging.propose(3, "p1", key="k", value=1, source="s", evidence_ids=["x"])  # no propose tool
-        self.archivist.append_evidence(2, "hospital", kind="x", content={})
+        ev = self.imaging.append_evidence(kind="ct", content={})              # L1 write: allowed
+        self.assertEqual(self.c.get_evidence(3, "p1", ev["id"])["source"], "seat:imaging_reader")
+        with self.assertRaises(PolicyViolation):
+            self.imaging.propose_patient_rule(key="k", value=1, source="s", evidence_ids=[ev["id"]])  # L2 write
+        with self.assertRaises(PolicyViolation):
+            self.imaging.patient_rules()                                      # L2 read
+        with self.assertRaises(PolicyViolation):
+            self.imaging.append_hospital_evidence(kind="x", content={})       # L3 write
+        with self.assertRaises(PolicyViolation):
+            self.imaging.active_rules()
+        self.archivist.append_hospital_evidence(kind="x", content={})
+        self.assertEqual(len(self.c.list_evidence(2, "hospital")), 1)
 
-    def test_view_has_no_human_operations(self):
+    def test_layers_map_to_cortex_partitions(self):
+        ev = self.archivist.append_evidence(kind="decision", content={"a": 1})
+        rule = self.archivist.propose_patient_rule(key="k", value=1, source="s", evidence_ids=[ev["id"]])
+        self.assertEqual((rule["layer"], rule["partition"]), (3, "p1"))
+        hev = self.archivist.append_hospital_evidence(kind="precedent", content={})
+        hrule = self.archivist.propose_hospital_rule(key="h", value=1, source="s", evidence_ids=[hev["id"]])
+        self.assertEqual((hrule["layer"], hrule["partition"]), (2, "hospital"))
+        with self.assertRaises(EvidenceRequired):  # a hospital rule can't cite patient evidence
+            self.archivist.propose_hospital_rule(key="h2", value=1, source="s", evidence_ids=[ev["id"]])
+
+    def test_has_no_human_operations(self):
         for name in ("confirm", "reject", "retire", "reverify", "erase_patient"):
             self.assertFalse(hasattr(self.archivist, name), name)
 
     def test_proposer_is_always_the_seat(self):
-        ev = self.archivist.append_evidence(3, "p1", kind="x", content={})
-        k = self.archivist.propose(3, "p1", key="k", value=1, source="s", evidence_ids=[ev["id"]],
-                                   proposed_by="dr-rossi")
+        ev = self.archivist.append_evidence(kind="x", content={})
+        k = self.archivist.propose_patient_rule(key="k", value=1, source="s", evidence_ids=[ev["id"]],
+                                                proposed_by="dr-rossi")
         self.assertEqual(k["proposed_by"], "seat:archivist")
-        self.assertEqual(ev["source"], "seat:archivist")
 
     def test_processed_keys_are_namespaced_per_seat(self):
-        self.assertTrue(self.imaging.mark_processed("k", 3, "p1", {"a": 1}))
-        self.assertFalse(self.imaging.mark_processed("k", 3, "p1"))
-        self.assertTrue(self.archivist.mark_processed("k", 3, "p1"))
+        self.assertTrue(self.imaging.mark_processed("k", {"a": 1}))
+        self.assertFalse(self.imaging.mark_processed("k"))
+        self.assertTrue(self.archivist.mark_processed("k"))
         self.assertEqual(self.imaging.processed_result("k"), {"a": 1})
+
+
+class ReleaseVerifierTest(unittest.TestCase):
+    """With release_verifier, every human decision must carry the clinician's signed kcd_core release."""
+
+    def setUp(self):
+        self.clinician = Signer.generate("dr_rossi")
+        self.c = Cortex(human_verifier=release_verifier(KeyRing({"dr_rossi": self.clinician.public_key})))
+        ev = self.c.append_evidence(3, "p1", kind="x", source="t", content={})
+        self.rule = self.c.propose(3, "p1", key="k", value=1, source="s", evidence_ids=[ev["id"]], proposed_by="seat:a")
+
+    def release(self, artifact_id, signer=None, role="clinician:nephrology", clinician_id="dr_rossi"):
+        r = Release(id="rel_9", artifact_id=artifact_id, artifact_hash="sha256:" + "0" * 64, clinician_id=clinician_id,
+                    role=role, content_classes=[], signed_at=datetime(2026, 10, 26, tzinfo=UTC))
+        return sign_release(r, signer or self.clinician)
+
+    def test_signed_release_for_this_rule_confirms(self):
+        actor = HumanActor("dr_rossi", "clinician:nephrology", self.release(self.rule["id"]))
+        self.assertEqual(self.c.confirm(self.rule["id"], actor)["status"], "confirmed")
+
+    def test_everything_else_is_refused(self):
+        rid = self.rule["id"]
+        forger = Signer.generate("dr_rossi")  # same id, different key
+        cases = [
+            HumanActor("dr_rossi", "clinician:nephrology"),                                        # no release
+            HumanActor("dr_rossi", "clinician:nephrology", self.release("ko_other_rule")),         # other target
+            HumanActor("dr_rossi", "clinician:nephrology", self.release(rid, signer=forger)),      # bad signature
+            HumanActor("dr_rossi", "clinician:radiology", self.release(rid)),                      # role mismatch
+            HumanActor("dr_bianchi", "clinician:nephrology", self.release(rid)),                   # not the signer
+            HumanActor("seat:archivist", "clinician:nephrology", self.release(rid)),
+        ]
+        for actor in cases:
+            with self.assertRaises(HumanRequired):
+                self.c.confirm(rid, actor)
+        self.assertEqual(self.c.get_knowledge(rid)["status"], "shadow")
+
+    def test_erasure_needs_a_release_for_that_patient(self):
+        with self.assertRaises(HumanRequired):
+            self.c.erase_patient("p1", HumanActor("dr_rossi", "clinician:nephrology", self.release("erase:p2")), "r")
+        actor = HumanActor("dr_rossi", "clinician:nephrology", self.release("erase:p1"))
+        self.assertTrue(self.c.erase_patient("p1", actor, "patient request")["complete"])
 
 
 if __name__ == "__main__":

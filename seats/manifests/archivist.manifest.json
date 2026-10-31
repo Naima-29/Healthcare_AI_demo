@@ -1,25 +1,31 @@
 {
   "seat": "archivist",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "location": "edge",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "provider": "none",
+    "name": "rule templates (no model)"
   },
-  "skills": [],
+  "skills": [
+    "evidence_append",
+    "rule_propose"
+  ],
   "tools": [
-    "km.lookup"
+    "board.read_artifact"
   ],
   "surfaces": [],
   "memory": {
     "read": [
       "L0",
       "L1",
-      "L2"
+      "L2",
+      "L3"
     ],
     "write": [
       "L0",
-      "L2"
+      "L1",
+      "L2",
+      "L3"
     ]
   },
   "refuses": [
@@ -27,9 +33,16 @@
     "no_prescribing",
     "no_result_disclosure",
     "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "no_patient_contact",
+    "no_rule_self_confirmation",
+    "no_patient_data_in_weights"
   ],
-  "gates": [],
+  "gates": [
+    {
+      "artifact": "knowledge_rule",
+      "signer_role": "clinician:nephrology"
+    }
+  ],
   "a2a_peers": [
     "dispatcher"
   ],
@@ -37,9 +50,10 @@
     "clinician_decision"
   ],
   "emits": [
-    "acknowledgment"
+    "acknowledgment",
+    "case_pack_ready"
   ],
-  "artifact": null,
+  "artifact": "knowledge_rule",
   "unit": "nephrology",
-  "job_description": "Turn signed clinician decisions into shadow memory rules for that patient; they apply only after a clinician confirms them."
+  "job_description": "Turn every signed clinician decision into durable, typed memory. Verify the clinician's release, write the evidence to the append-only evidence store, then propose versioned rules for the patient or the hospital, in trial mode until a clinician confirms them. Never store without evidence, never confirm a rule yourself, never write patient data into shared model weights."
 }

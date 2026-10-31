@@ -25,11 +25,14 @@ class QualityThresholds:
     max_normalized_entropy: float = 0.85
 
 
+DEFAULT_THRESHOLDS = QualityThresholds()
+
+
 def _check(name: str, ok: bool, value: float, limit: str) -> dict:
     return {"name": name, "ok": bool(ok), "value": round(float(value), 4), "limit": limit}
 
 
-def check_image(img: LoadedImage, t: QualityThresholds = QualityThresholds()) -> dict:
+def check_image(img: LoadedImage, t: QualityThresholds = DEFAULT_THRESHOLDS) -> dict:
     g = img.gray
     side_min, side_max = min(img.width, img.height), max(img.width, img.height)
     aspect = img.width / img.height if img.height else 0.0
@@ -45,7 +48,7 @@ def check_image(img: LoadedImage, t: QualityThresholds = QualityThresholds()) ->
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
 
 
-def check_prediction(probabilities: np.ndarray, t: QualityThresholds = QualityThresholds()) -> list[dict]:
+def check_prediction(probabilities: np.ndarray, t: QualityThresholds = DEFAULT_THRESHOLDS) -> list[dict]:
     p = np.asarray(probabilities, dtype=np.float64)
     top = float(p.max())
     k = p.size

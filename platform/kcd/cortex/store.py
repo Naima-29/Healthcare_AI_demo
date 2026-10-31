@@ -7,8 +7,8 @@
 * Erasure: deleting an L3 partition removes the patient's evidence, rules and blobs,
   runs the registered hooks (e.g. a per-patient adapter) and leaves an anonymous receipt.
 
-Seats never touch this class directly: they get a CortexView scoped by their manifest
-(see access.py). Confirm, reject, re-verify, retire and erase are human-only operations
+Seats never touch this class directly: they get a CoreMemory (access.py), checked by kcd_core's PEP
+layer by layer. Confirm, reject, re-verify, retire and erase are human-only operations
 called by the Clinical Board.
 """
 from __future__ import annotations
@@ -16,9 +16,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from sqlalchemy import and_, create_engine, delete, func, insert, select, update
 from sqlalchemy.engine import Connection, Engine
@@ -62,19 +63,26 @@ class HumanRequired(CortexError, PermissionError):
 
 @dataclass(frozen=True)
 class HumanActor:
-    """A logged-in person acting on the Clinical Board. release_ref links to their signed release."""
+    """A logged-in person acting on the Clinical Board. `release` is their signed kcd_core Release
+    for the action (required by kcd.cortex.auth.release_verifier, ignored by the development verifier)."""
     id: str
     role: str
-    release_ref: str | None = None
+    release: Any = None
 
 
-HumanVerifier = Callable[[HumanActor], bool]
+# (actor, target) -> allowed. target is the rule id being decided, or "erase:<patient id>".
+HumanVerifier = Callable[[HumanActor, str], bool]
 
 
-def default_human_verifier(actor: HumanActor) -> bool:
-    """Development verifier. Core replaces it with a check of the clinician's signed release."""
+def is_human_role(role: str) -> bool:
+    return role in HUMAN_ROLES or (role.startswith("clinician:") and len(role) > len("clinician:"))
+
+
+def default_human_verifier(actor: HumanActor, target: str) -> bool:
+    """Development verifier: a named person with a clinical role. Use kcd.cortex.auth.release_verifier
+    in any shared deployment so every decision is backed by the clinician's signed release."""
     return (isinstance(actor, HumanActor) and bool(actor.id and actor.id.strip())
-            and not actor.id.startswith("seat:") and actor.role in HUMAN_ROLES)
+            and not actor.id.startswith("seat:") and is_human_role(actor.role))
 
 
 def _check_partition(layer: int, partition: str) -> None:
@@ -155,7 +163,8 @@ class Cortex:
         """Recompute every hash in the partition. Detects edited, deleted or reordered rows and bad blobs."""
         with self.engine.connect() as conn:
             rows = [r._asdict() for r in conn.execute(
-                select(schema.evidence).where(_part(schema.evidence, layer, partition)).order_by(schema.evidence.c.seq))]
+                select(schema.evidence).where(_part(schema.evidence, layer, partition))
+                .order_by(schema.evidence.c.seq))]
         prev = GENESIS
         for expected_seq, row in enumerate(rows, 1):
             problem = None
@@ -217,7 +226,7 @@ class Cortex:
         raise CortexError(f"could not propose rule {key!r} after {APPEND_RETRIES} attempts")
 
     def confirm(self, knowledge_id: str, actor: HumanActor) -> dict:
-        self._require_human(actor)
+        self._require_human(actor, knowledge_id)
         now = iso(self.clock())
         with self.engine.begin() as conn:
             row = self._load_for_update(conn, knowledge_id)
@@ -240,7 +249,7 @@ class Cortex:
 
     def reverify(self, knowledge_id: str, actor: HumanActor) -> dict:
         """A human re-checks a confirmed rule: its confidence stops decaying from now."""
-        self._require_human(actor)
+        self._require_human(actor, knowledge_id)
         now = iso(self.clock())
         with self.engine.begin() as conn:
             row = self._load_for_update(conn, knowledge_id)
@@ -304,8 +313,8 @@ class Cortex:
 
     def erase_patient(self, patient_id: str, actor: HumanActor, reason: str) -> dict:
         """Right to erasure (GDPR art. 17 / Law 09-08): delete the patient's L3 partition. No retraining needed."""
-        self._require_human(actor)
         _check_partition(3, patient_id)
+        self._require_human(actor, f"erase:{patient_id}")
         if not reason or not reason.strip():
             raise ValueError("an erasure needs a reason")
         with self.engine.begin() as conn:
@@ -330,17 +339,17 @@ class Cortex:
 
     # ------------------------------------------------------------------ internals
     def _subject_hash(self, patient_id: str) -> str:
-        msg = f"3:{patient_id}".encode("utf-8")
+        msg = f"3:{patient_id}".encode()
         if self._receipt_key:
             return hmac.new(self._receipt_key, msg, hashlib.sha256).hexdigest()
         return sha256_hex(msg)
 
-    def _require_human(self, actor: HumanActor) -> None:
-        if not self.human_verifier(actor):
+    def _require_human(self, actor: HumanActor, target: str) -> None:
+        if not self.human_verifier(actor, target):
             raise HumanRequired("refused (auto_confirm_rule): this action needs a verified human")
 
     def _decide(self, knowledge_id: str, actor: HumanActor, *, from_status: str, to_status: str, note: str) -> dict:
-        self._require_human(actor)
+        self._require_human(actor, knowledge_id)
         if not note or not note.strip():
             raise ValueError(f"{to_status} needs a reason")
         now = iso(self.clock())

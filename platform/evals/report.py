@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from evals.dataset import Dataset
@@ -18,7 +18,7 @@ def markdown(ds: Dataset, target: str, result: dict) -> str:
     lines = [
         f"# Eval: {ds.name} v{ds.card['version']} × {target}",
         "",
-        f"- Run: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        f"- Run: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}",
         f"- Items: {m['n']} · errors: {m['errors']}",
         f"- Review status: **{ds.card['review_status']}**"
         + ("" if ds.reviewed else " (draft labels, not clinical evidence)"),
@@ -59,7 +59,7 @@ def markdown(ds: Dataset, target: str, result: dict) -> str:
 
 
 def write(ds: Dataset, target: str, result: dict, out_dir: Path) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     folder = out_dir / ds.name
     folder.mkdir(parents=True, exist_ok=True)
     md = folder / f"{target}-{stamp}.md"

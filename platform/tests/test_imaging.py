@@ -8,17 +8,27 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import numpy as np
+from kcd_core.contracts import MessageType
+from kcd_core.contracts.messages import ImagingSignal
+from kcd_core.pep import PolicyViolation
 
-from kcd.contracts import CT_LABELS, validate_imaging_signal
 from kcd.cortex import Cortex
+from kcd.desk import Desk
 from kcd.imaging import heatmap as hm
 from kcd.imaging.calibration import Calibration, ece, fit_temperature, softmax
 from kcd.imaging.image_io import ImageDecodeError, load_image
-from kcd.imaging.model import CallableCtModel, CtModelError, FixedCtModel, HttpCtModel, prediction_from_dict
+from kcd.imaging.model import (
+    CT_LABELS,
+    CallableCtModel,
+    CtModelError,
+    FixedCtModel,
+    HttpCtModel,
+    prediction_from_dict,
+)
 from kcd.imaging.pacs import DicomWebPacs, FolderPacs, PacsError
 from kcd.imaging.quality import check_image, check_prediction
-from kcd.seatkit import InMemoryGates, InMemoryOutbox, RefusalError
 from kcd.seats.imaging_reader import ImagingReader, NoStudy
+from kcd.tools import imaging_tools
 from tests.helpers import DEMO_CT, png_bytes, synthetic_ct, write_study
 
 TUMOR = {"Normal": 0.02, "Cyst": 0.03, "Stone": 0.05, "Tumor": 0.90}
@@ -138,8 +148,8 @@ class ModelAdapterTest(unittest.TestCase):
         p = prediction_from_dict({"model_version": "m1", "labels": ["Tumor", "Stone", "Normal", "Cyst"],
                                   "probs": [0.7, 0.1, 0.15, 0.05]})
         probs = softmax(p.logits)
-        self.assertEqual(dict(zip(CT_LABELS, np.round(probs, 4))), {"normal": 0.15, "cyst": 0.05, "stone": 0.1,
-                                                                    "tumor": 0.7})
+        self.assertEqual(dict(zip(CT_LABELS, np.round(probs, 4), strict=True)),
+                         {"normal": 0.15, "cyst": 0.05, "stone": 0.1, "tumor": 0.7})
         self.assertEqual(p.output_kind, "probs")
 
     def test_rejects_bad_outputs(self):
@@ -276,7 +286,8 @@ class HttpAdaptersTest(unittest.TestCase):
         try:
             pacs = DicomWebPacs(srv.url)
             found = pacs.list_studies("marco-r")
-            self.assertEqual([s.study_uid for s in found], ["1.2.new", "1.2.old"])  # CT only, exact patient, newest first
+            # CT only, exact patient match, newest first
+            self.assertEqual([s.study_uid for s in found], ["1.2.new", "1.2.old"])
             self.assertEqual(found[0].acquired, "2026-10-11T18:20:00")
             data, media = pacs.fetch_key_image(found[0])  # middle instance of the largest series
             self.assertEqual((data, media), (png, "image/png"))
@@ -290,118 +301,161 @@ class HttpAdaptersTest(unittest.TestCase):
             srv.close()
 
 
-class ReaderTest(unittest.TestCase):
-    def setUp(self):
+class Down:
+    """A CT model service that is unavailable."""
+
+    model_version = "m"
+
+    def predict(self, *a):
+        raise CtModelError("service unavailable")
+
+
+class ReaderTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.image = synthetic_ct()
-        write_study(self.root, "marco-r", "1.2.3", self.image)
+        write_study(self.root, "pt_marco", "1.2.3", self.image)
+        self.desk = await Desk.create()
         self.cortex = Cortex()
-        self.outbox = InMemoryOutbox()
-        self.gates = InMemoryGates()
 
-    def tearDown(self):
+    async def asyncTearDown(self):
+        await self.desk.close()
         self.tmp.cleanup()
 
-    def reader(self, model=None, calibration="default"):
+    async def reader(self, model=None, calibration="default"):
         model = model or FixedCtModel(TUMOR)
-        cal = Calibration(2.0, model.model_version if hasattr(model, "model_version") else "m") \
-            if calibration == "default" else calibration
-        return ImagingReader(self.cortex, self.outbox, self.gates, FolderPacs(self.root), model, cal)
+        if calibration == "default":
+            calibration = Calibration(2.0, getattr(model, "model_version", "m"))
+        seat = ImagingReader(self.cortex, calibration, audit=self.desk.audit, clock=self.desk.clock)
+        rt = await self.desk.add_seat(seat, imaging_tools(FolderPacs(self.root), model))
+        return seat, rt.context()
 
-    def test_happy_path(self):
-        out = self.reader().process_study("marco-r", correlation="msg_req")
-        p = out["payload"]
-        validate_imaging_signal(p)
-        self.assertEqual((p["status"], p["label"]), ("ok", "tumor"))
-        self.assertLess(p["p_calibrated"], p["p_raw"])                  # T = 2 softens 0.90
-        self.assertAlmostEqual(sum(p["probabilities"].values()), 1.0, places=3)
-        self.assertEqual(p["calibration"]["status"], "calibrated")
-        self.assertFalse(p["cam_metrics"]["empty"])
-        env = self.outbox.sent[0]
-        self.assertEqual((env.type, env.to, env.route_hint, env.correlation),
-                         ("imaging_signal", "dispatcher", ["safety_verifier", "case_briefer"], "msg_req"))
-        self.assertEqual(self.gates.opened[0]["gate"], "radiologist_review")
-        kinds = [e["kind"] for e in self.cortex.list_evidence(3, "marco-r")]
-        self.assertEqual(kinds, ["ct_key_image", "ct_heatmap_overlay", "imaging_signal"])
-        self.assertTrue(self.cortex.verify_chain(3, "marco-r")["ok"])
+    async def process(self, seat, ctx, patient="pt_marco", **kw):
+        result = await seat.process_study(ctx, patient_id=patient, episode_id="ep_1", **kw)
+        await self.desk.bus.drain()
+        return result
 
-    def test_original_image_is_stored_unaltered(self):
-        out = self.reader().process_study("marco-r")
-        key_ev = self.cortex.get_evidence(3, "marco-r", out["payload"]["provenance"]["key_image_evidence_id"])
-        self.assertEqual(self.cortex.read_blob(3, "marco-r", key_ev["blob_sha256"]), self.image)
-        self.assertEqual((self.root / "marco-r" / "1_2_3" / "key.png").read_bytes(), self.image)
+    def signals(self):
+        return self.desk.delivered_to("safety_verifier")
 
-    def test_uncertain_prediction_is_out_of_distribution(self):
-        p = self.reader(FixedCtModel({"normal": 0.3, "cyst": 0.25, "stone": 0.25, "tumor": 0.2}))\
-            .process_study("marco-r")["payload"]
-        self.assertEqual(p["status"], "out_of_distribution")
-        validate_imaging_signal(p)
+    async def test_happy_path(self):
+        seat, ctx = await self.reader()
+        r = await self.process(seat, ctx)
+        self.assertEqual((r.status, r.sent), ("ok", True))
+        env = self.signals()[0]
+        self.assertEqual((env.type, env.from_, env.to),
+                         (MessageType.IMAGING_SIGNAL, "imaging_reader", "safety_verifier"))
+        sig = ImagingSignal.model_validate(env.payload)  # Core's frozen contract
+        self.assertEqual((sig.label, sig.quality, sig.study_uid), ("tumor", "ok", "1.2.3"))
+        self.assertLess(sig.p_calibrated, sig.p_raw)  # T = 2 softens 0.90
+        self.assertTrue(sig.heatmap_ref.startswith("cortex:evidence/"))
+        self.assertIn(r.details_evidence_id, sig.technical_note)
+        self.assertAlmostEqual(sum(r.details["probabilities"].values()), 1.0, places=3)
+        self.assertEqual(self.desk.bus.dead_letters, [])
+        kinds = [e["kind"] for e in self.cortex.list_evidence(3, "pt_marco")]
+        self.assertEqual(kinds, ["ct_key_image", "ct_heatmap_overlay", "imaging_signal_details"])
+        self.assertTrue(self.cortex.verify_chain(3, "pt_marco")["ok"])
+        self.assertTrue(self.desk.audit.verify_chain())
 
-    def test_unreadable_and_model_error_still_signal(self):
-        write_study(self.root, "anna-b", "9.9", b"garbage", acquired="2026-10-12T00:00:00Z")
-        p = self.reader().process_study("anna-b")["payload"]
-        self.assertEqual((p["status"], p["label"], p["p_calibrated"]), ("unreadable", "indeterminate", None))
-        validate_imaging_signal(p)
+    async def test_original_image_is_stored_unaltered(self):
+        seat, ctx = await self.reader()
+        r = await self.process(seat, ctx)
+        key_ev = self.cortex.get_evidence(3, "pt_marco", r.details["provenance"]["key_image_evidence_id"])
+        self.assertEqual(self.cortex.read_blob(3, "pt_marco", key_ev["blob_sha256"]), self.image)
+        self.assertEqual((self.root / "pt_marco" / "1_2_3" / "key.png").read_bytes(), self.image)
 
-        class Down:
-            model_version = "m"
+    async def test_uncertain_prediction_is_out_of_distribution(self):
+        seat, ctx = await self.reader(FixedCtModel({"normal": 0.3, "cyst": 0.25, "stone": 0.25, "tumor": 0.2}))
+        r = await self.process(seat, ctx)
+        self.assertEqual(r.status, "out_of_distribution")
+        self.assertEqual(ImagingSignal.model_validate(self.signals()[0].payload).quality, "out_of_distribution")
 
-            def predict(self, *a):
-                raise CtModelError("service unavailable")
+    async def test_poor_image_gives_low_quality_signal(self):
+        write_study(self.root, "pt_anna", "7.7", png_bytes(np.full((64, 64), 120, np.uint8)))
+        seat, ctx = await self.reader()
+        r = await self.process(seat, ctx, patient="pt_anna")
+        self.assertEqual((r.status, r.sent), ("low", True))
+        failed = {c["name"] for c in r.details["quality_checks"] if not c["ok"]}
+        self.assertEqual(failed, {"min_side_px", "contrast_std"})
 
-        p = self.reader(Down()).process_study("marco-r")["payload"]
-        self.assertEqual(p["status"], "model_error")
-        self.assertIn("service unavailable", p["quality"]["error"])
-        self.assertEqual(len(self.gates.opened), 2)  # radiologist still gets both
+    async def test_unreadable_image_is_loud_not_silent(self):
+        write_study(self.root, "pt_anna", "9.9", b"garbage")
+        seat, ctx = await self.reader()
+        r = await self.process(seat, ctx, patient="pt_anna")
+        self.assertEqual((r.status, r.sent, r.message_id), ("unreadable", False, None))
+        self.assertEqual(self.signals(), [])
+        self.assertEqual(self.desk.audit.find("imaging.no_signal", "error")[0].detail["status"], "unreadable")
+        details = self.cortex.get_evidence(3, "pt_anna", r.details_evidence_id)
+        self.assertIn("cannot decode", details["content"]["error"])
 
-    def test_calibration_states(self):
-        p = self.reader(calibration=None).process_study("marco-r")["payload"]
-        self.assertEqual(p["calibration"]["status"], "uncalibrated")
-        self.assertEqual(p["p_calibrated"], p["p_raw"])
-        p = self.reader(calibration=Calibration(2.0, "another-model")).process_study("marco-r", force=True)["payload"]
-        self.assertEqual(p["calibration"]["status"], "stale")
-        self.assertEqual(p["p_calibrated"], p["p_raw"])
+    async def test_model_failure_is_loud_not_silent(self):
+        seat, ctx = await self.reader(Down())
+        r = await self.process(seat, ctx)
+        self.assertEqual((r.status, r.sent), ("model_error", False))
+        self.assertIn("service unavailable", r.details["error"])
+        self.assertEqual(self.desk.audit.find("imaging.no_signal", "error")[0].detail["status"], "model_error")
+        self.assertEqual(self.signals(), [])
 
-    def test_study_selection(self):
-        write_study(self.root, "marco-r", "1.2.4", self.image, acquired="2026-10-20T08:00:00Z")
-        write_study(self.root, "marco-r", "1.2.5", self.image, acquired="2026-10-21T08:00:00Z", modality="MR")
-        r = self.reader()
-        self.assertEqual(r.process_study("marco-r")["payload"]["provenance"]["study_uid"], "1.2.4")
-        self.assertEqual(r.process_study("marco-r", "1.2.3")["payload"]["provenance"]["study_uid"], "1.2.3")
+    async def test_calibration_states(self):
+        seat, ctx = await self.reader(calibration=None)
+        r = await self.process(seat, ctx)
+        self.assertEqual(r.details["calibration"]["status"], "uncalibrated")
+        self.assertEqual(r.details["p_calibrated"], r.details["p_raw"])
+        seat.calibration = Calibration(2.0, "another-model")
+        r = await self.process(seat, ctx, force=True)
+        self.assertEqual(r.details["calibration"]["status"], "stale")
+        self.assertEqual(r.details["p_calibrated"], r.details["p_raw"])
+
+    async def test_study_selection(self):
+        write_study(self.root, "pt_marco", "1.2.4", self.image, acquired="2026-10-20T08:00:00Z")
+        write_study(self.root, "pt_marco", "1.2.5", self.image, acquired="2026-10-21T08:00:00Z", modality="MR")
+        seat, ctx = await self.reader()
+        self.assertEqual((await self.process(seat, ctx)).details["provenance"]["study_uid"], "1.2.4")
+        picked = await self.process(seat, ctx, study_uid="1.2.3")
+        self.assertEqual(picked.details["provenance"]["study_uid"], "1.2.3")
         with self.assertRaises(NoStudy):
-            r.process_study("marco-r", "1.2.5")  # MR is not a CT
+            await self.process(seat, ctx, study_uid="1.2.5")  # MR is not a CT
         with self.assertRaises(NoStudy):
-            r.process_study("nobody")
+            await self.process(seat, ctx, patient="nobody")
         with self.assertRaises(PacsError):
-            r.process_study("../etc")
+            await self.process(seat, ctx, patient="../etc")
 
-    def test_idempotent_unless_forced(self):
-        r = self.reader()
-        first = r.process_study("marco-r")
-        again = r.process_study("marco-r")
-        self.assertTrue(again["duplicate"])
-        self.assertEqual(again["message_id"], first["message_id"])
-        self.assertEqual(len(self.outbox.sent), 1)
-        r.process_study("marco-r", force=True)
-        self.assertEqual(len(self.outbox.sent), 2)
+    async def test_idempotent_unless_forced(self):
+        seat, ctx = await self.reader()
+        first = await self.process(seat, ctx)
+        again = await self.process(seat, ctx)
+        self.assertTrue(again.duplicate)
+        self.assertEqual(again.message_id, first.message_id)
+        self.assertEqual(len(self.signals()), 1)
+        await self.process(seat, ctx, force=True)
+        self.assertEqual(len(self.signals()), 2)
 
-    def test_refusals(self):
-        r = self.reader()
-        with self.assertRaises(RefusalError) as cm:
-            r.send("imaging_signal", "marco-r", {}, to="patient")
-        self.assertEqual(cm.exception.refusal, "report_to_patient")
-        with self.assertRaises(RefusalError) as cm:
-            r.check_text("Diagnosis: renal cell carcinoma")
-        self.assertEqual(cm.exception.refusal, "label_as_diagnosis")
-        with self.assertRaises(RefusalError) as cm:
-            r.act("pacs.write")
-        self.assertEqual(cm.exception.refusal, "alter_image")
-        with self.assertRaises(RefusalError):
-            r.open_gate("clinician_signoff", "marco-r", "x", {})
-        with self.assertRaises(RefusalError):
-            r.send("imaging_signal", "marco-r", {}, to="case_briefer")  # only the Dispatcher is a peer
+    async def test_policy(self):
+        seat, ctx = await self.reader()
+        for tool, refusal in (("pacs.write_study", "no_image_alteration"),
+                              ("channel.send_message", "no_patient_contact")):
+            with self.assertRaises(PolicyViolation) as cm:
+                ctx.pep.check_tool(tool)
+            self.assertEqual(cm.exception.refusal, refusal)
+        with self.assertRaises(PolicyViolation) as cm:
+            ctx.guard_content("diagnosis")  # a diagnosis needs a clinician release
+        self.assertEqual(cm.exception.refusal, "no_diagnosis")
+        with self.assertRaises(PolicyViolation):
+            ctx.pep.check_emit(MessageType.IMAGING_SIGNAL, "case_briefer")  # only via the Safety Verifier
+        with self.assertRaises(PolicyViolation):
+            ctx.check_memory("L2", "read")
         self.assertFalse(any(hasattr(FolderPacs, m) for m in ("write", "store", "put", "delete")))
+
+    async def test_policy_violation_from_a_tool_is_not_swallowed_as_model_error(self):
+        seat, ctx = await self.reader()
+        registry = self.desk.registry
+        without_model = registry.get("imaging_reader").model_copy(
+            update={"tools": ["pacs.list_studies", "pacs.fetch_study"]})
+        registry.activate(without_model)  # hot reload: ct.classify is no longer allowed
+        with self.assertRaises(PolicyViolation):
+            await self.process(seat, ctx)
+        self.assertEqual(self.signals(), [])
 
 
 if __name__ == "__main__":

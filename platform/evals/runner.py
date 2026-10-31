@@ -34,7 +34,7 @@ def score_classification(rows: list[dict], labels: list[str]) -> dict:
     pc = metrics.per_class(y_true, y_pred, labels)
     return {
         "n": len(rows),
-        "accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(rows) if rows else 0.0,
+        "accuracy": sum(t == p for t, p in zip(y_true, y_pred, strict=True)) / len(rows) if rows else 0.0,
         "macro_f1": sum(c["f1"] for c in pc.values()) / len(pc) if pc else 0.0,
         "per_class": pc,
         "confusion": metrics.confusion(y_true, y_pred, labels),
@@ -54,7 +54,7 @@ def score_red_flag(rows: list[dict], labels: list[str]) -> dict:
     scores = [float(r["score"] or 0.0) for r in rows]
     return {
         "n": len(rows),
-        "accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(rows) if rows else 0.0,
+        "accuracy": sum(t == p for t, p in zip(y_true, y_pred, strict=True)) / len(rows) if rows else 0.0,
         "macro_f1": sum(c["f1"] for c in pc.values()) / len(pc) if pc else 0.0,
         "per_class": pc,
         "confusion": metrics.confusion(y_true, y_pred, labels),

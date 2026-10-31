@@ -4,26 +4,26 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def iso(dt: datetime) -> str:
     """ISO-8601 in UTC with a 'Z' suffix. Naive datetimes are refused, not guessed."""
     if dt.tzinfo is None:
         raise ValueError("naive datetime: pass a timezone-aware value")
-    return dt.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return dt.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def parse_iso(s: str) -> datetime:
     dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     if dt.tzinfo is None:
         raise ValueError(f"timestamp without timezone: {s!r}")
-    return dt.astimezone(timezone.utc)
+    return dt.astimezone(UTC)
 
 
 def new_id(prefix: str) -> str:

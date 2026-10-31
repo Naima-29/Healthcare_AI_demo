@@ -1,15 +1,20 @@
 {
   "seat": "genomics_interpreter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "location": "edge",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "provider": "none",
+    "name": "variant rules from the Knowledge Model (km.lookup)"
   },
-  "skills": [],
+  "skills": [
+    "read_panel",
+    "acmg_context",
+    "clinical_relevance"
+  ],
   "tools": [
     "genomics.read_panel",
-    "km.lookup"
+    "km.lookup",
+    "fhir.read_patient"
   ],
   "surfaces": [],
   "memory": {
@@ -19,7 +24,8 @@
       "L3"
     ],
     "write": [
-      "L0"
+      "L0",
+      "L1"
     ]
   },
   "refuses": [
@@ -46,7 +52,7 @@
   "emits": [
     "data_delivered"
   ],
-  "artifact": null,
+  "artifact": "genomic_context",
   "unit": "genetics",
-  "job_description": "Read the patient's DNA panel against the Knowledge Model's variant classes (ACMG) and send hereditary context to the case pack."
+  "job_description": "Read the patient's genetic panel against the Knowledge Model and explain, for the clinical team, what each reported variant means for this case: hereditary risk, surveillance and kidney-sparing considerations. Use the laboratory's classification; never reclassify a variant. Never disclose genetic findings to the patient; disclosure requires a geneticist."
 }

@@ -92,7 +92,8 @@ def parse_panel_json(d: dict) -> Panel:
             raise PanelError(f"variant {i} needs 'gene' and 'clinical_significance'")
         raw = str(v["clinical_significance"])
         variants.append(Variant(gene=str(v["gene"]).strip().upper(), classification_raw=raw,
-                                classification=normalize_classification(raw), zygosity=normalize_zygosity(v.get("zygosity")),
+                                classification=normalize_classification(raw),
+                                zygosity=normalize_zygosity(v.get("zygosity")),
                                 variant_id=str(v.get("variant_id", "")), hgvs=str(v.get("hgvs_notation", "")),
                                 condition=str(v.get("associated_condition", "")),
                                 evidence_level=str(v.get("evidence_level", ""))))

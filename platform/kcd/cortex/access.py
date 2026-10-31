@@ -1,74 +1,104 @@
-"""Seat access to Cortex, scoped by the manifest's memory read/write layers.
+"""Seat access to Cortex through kcd_core's policy enforcement point.
 
-A seat gets a CortexView, never the Cortex itself. The view has no confirm, reject,
-re-verify, retire or erase methods: those are human-only and live on Cortex, called
-by the Clinical Board.
+Every read or write asks the PEP first (ctx.check_memory), using kcd_core's memory layers:
+
+    kcd_core layer                     Cortex storage
+    L0  episode working memory     ->  idempotency bookkeeping, partition (3, patient)
+    L1  patient evidence           ->  evidence store,  partition (3, patient)
+    L2  patient knowledge          ->  knowledge store, partition (3, patient)
+    L3  shared hospital knowledge  ->  evidence + knowledge, partition (2, hospital)
+
+(Cortex keeps the deck's numbering internally: 3 = the patient, 2 = the hospital. The deck's
+L0 medical knowledge and L1 specialty playbook live in the Knowledge Model, reached via km.lookup.)
+
+A seat gets a CoreMemory, never the Cortex itself. There is no confirm, reject, re-verify,
+retire or erase here: those are human-only and live on Cortex, called by the Clinical Board.
 """
+
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Protocol
 
 from kcd.cortex.store import Cortex
-from kcd.seatkit import Manifest, RefusalError
+
+PATIENT = 3
+HOSPITAL = 2
+DEFAULT_HOSPITAL = "hospital"
 
 
-class MemoryScopeError(RefusalError):
-    pass
+class MemoryGuard(Protocol):
+    """What CoreMemory needs from kcd_core.runtime.SeatContext."""
+
+    def check_memory(self, layer: Any, mode: str) -> None: ...
 
 
-class CortexView:
-    def __init__(self, cortex: Cortex, manifest: Manifest):
+class CoreMemory:
+    def __init__(self, cortex: Cortex, ctx: MemoryGuard, seat: str, patient_id: str,
+                 hospital: str = DEFAULT_HOSPITAL):
         self._cortex = cortex
-        self.seat = manifest.seat
-        self.read_layers = frozenset(manifest.memory_read)
-        self.write_layers = frozenset(manifest.memory_write)
-        self._tools = frozenset(manifest.tools)
+        self._ctx = ctx
+        self.seat = seat
+        self.patient_id = patient_id
+        self.hospital = hospital
 
-    def _need(self, tool: str, layer: int, mode: str) -> None:
-        if tool not in self._tools:
-            raise MemoryScopeError(self.seat, "tool_not_in_manifest", tool)
-        allowed = self.read_layers if mode == "read" else self.write_layers
-        if layer not in allowed:
-            raise MemoryScopeError(self.seat, "memory_scope", f"{mode} L{layer} not allowed")
+    def _check(self, layer: str, mode: str) -> None:
+        self._ctx.check_memory(layer, mode)  # raises kcd_core.pep.PolicyViolation when not allowed
 
-    # evidence
-    def append_evidence(self, layer: int, partition: str, **kwargs: Any) -> dict:
-        self._need("cortex.evidence_append", layer, "write")
-        kwargs.setdefault("source", f"seat:{self.seat}")
-        return self._cortex.append_evidence(layer, partition, **kwargs)
+    # L1: patient evidence ------------------------------------------------------------------
+    def append_evidence(self, *, kind: str, content: dict, blob: bytes | None = None, meta: dict | None = None,
+                        source: str | None = None) -> dict:
+        self._check("L1", "write")
+        return self._cortex.append_evidence(PATIENT, self.patient_id, kind=kind, source=source or f"seat:{self.seat}",
+                                            content=content, blob=blob, meta=meta)
 
-    def get_evidence(self, layer: int, partition: str, evidence_id: str) -> dict:
-        self._need("cortex.knowledge_read", layer, "read")
-        return self._cortex.get_evidence(layer, partition, evidence_id)
+    def get_evidence(self, evidence_id: str) -> dict:
+        self._check("L1", "read")
+        return self._cortex.get_evidence(PATIENT, self.patient_id, evidence_id)
 
-    def list_evidence(self, layer: int, partition: str, kind: str | None = None) -> list[dict]:
-        self._need("cortex.knowledge_read", layer, "read")
-        return self._cortex.list_evidence(layer, partition, kind)
+    def list_evidence(self, kind: str | None = None) -> list[dict]:
+        self._check("L1", "read")
+        return self._cortex.list_evidence(PATIENT, self.patient_id, kind)
 
-    def read_blob(self, layer: int, partition: str, sha: str) -> bytes:
-        self._need("cortex.knowledge_read", layer, "read")
-        return self._cortex.read_blob(layer, partition, sha)
+    def read_blob(self, sha: str) -> bytes:
+        self._check("L1", "read")
+        return self._cortex.read_blob(PATIENT, self.patient_id, sha)
 
-    # knowledge
-    def propose(self, layer: int, partition: str, **kwargs: Any) -> dict:
-        self._need("cortex.knowledge_propose", layer, "write")
+    # L2: patient knowledge -----------------------------------------------------------------
+    def propose_patient_rule(self, **kwargs: Any) -> dict:
+        self._check("L2", "write")
         kwargs["proposed_by"] = f"seat:{self.seat}"
-        return self._cortex.propose(layer, partition, **kwargs)
+        return self._cortex.propose(PATIENT, self.patient_id, **kwargs)
 
-    def list_knowledge(self, layer: int, partition: str, status: str | None = None) -> list[dict]:
-        self._need("cortex.knowledge_read", layer, "read")
-        return self._cortex.list_knowledge(layer, partition, status)
+    def patient_rules(self, status: str | None = None) -> list[dict]:
+        self._check("L2", "read")
+        return self._cortex.list_knowledge(PATIENT, self.patient_id, status)
 
-    def active_rules(self, partitions: Iterable[tuple[int, str]]) -> list[dict]:
-        partitions = list(partitions)
-        for layer, _ in partitions:
-            self._need("cortex.knowledge_read", layer, "read")
-        return self._cortex.active_rules(partitions)
+    # L3: shared hospital knowledge ---------------------------------------------------------
+    def append_hospital_evidence(self, *, kind: str, content: dict, meta: dict | None = None) -> dict:
+        self._check("L3", "write")
+        return self._cortex.append_evidence(HOSPITAL, self.hospital, kind=kind, source=f"seat:{self.seat}",
+                                            content=content, meta=meta)
 
-    # idempotency (bookkeeping, not clinical memory: allowed where the seat may write)
-    def mark_processed(self, key: str, layer: int, partition: str, result: dict | None = None) -> bool:
-        self._need("cortex.evidence_append", layer, "write")
-        return self._cortex.mark_processed(f"{self.seat}:{key}", layer, partition, result)
+    def propose_hospital_rule(self, **kwargs: Any) -> dict:
+        self._check("L3", "write")
+        kwargs["proposed_by"] = f"seat:{self.seat}"
+        return self._cortex.propose(HOSPITAL, self.hospital, **kwargs)
+
+    def hospital_rules(self, status: str | None = None) -> list[dict]:
+        self._check("L3", "read")
+        return self._cortex.list_knowledge(HOSPITAL, self.hospital, status)
+
+    def active_rules(self) -> list[dict]:
+        """Confirmed, still-confident rules for this patient (L2) and their hospital (L3)."""
+        self._check("L2", "read")
+        self._check("L3", "read")
+        return self._cortex.active_rules([(PATIENT, self.patient_id), (HOSPITAL, self.hospital)])
+
+    # L0: episode bookkeeping (idempotency) -------------------------------------------------
+    def mark_processed(self, key: str, result: dict | None = None) -> bool:
+        self._check("L0", "write")
+        return self._cortex.mark_processed(f"{self.seat}:{key}", PATIENT, self.patient_id, result)
 
     def processed_result(self, key: str) -> dict | None:
+        self._check("L0", "read")
         return self._cortex.processed_result(f"{self.seat}:{key}")

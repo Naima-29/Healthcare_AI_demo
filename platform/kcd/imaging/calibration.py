@@ -105,7 +105,7 @@ class Calibration:
             raise ValueError("a calibration must name the model version it was fitted for")
 
     @classmethod
-    def fit(cls, logits: np.ndarray, labels: np.ndarray, model_version: str) -> "Calibration":
+    def fit(cls, logits: np.ndarray, labels: np.ndarray, model_version: str) -> Calibration:
         logits, labels = _validate(logits, labels)
         t = fit_temperature(logits, labels)
         return cls(temperature=round(t, 4), model_version=model_version, n_samples=int(len(labels)),
@@ -119,5 +119,5 @@ class Calibration:
         Path(path).write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | Path) -> "Calibration":
+    def load(cls, path: str | Path) -> Calibration:
         return cls(**json.loads(Path(path).read_text(encoding="utf-8")))

@@ -19,16 +19,18 @@ import json
 import math
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 import numpy as np
 from PIL import Image
 
-from kcd.contracts import CT_LABELS
 from kcd.imaging.calibration import logits_from_probs
 from kcd.imaging.image_io import LoadedImage
 
+# Canonical class order used inside this package. kcd_core.contracts.messages.ImagingSignal accepts the same names.
+CT_LABELS = ("normal", "cyst", "stone", "tumor")
 LABEL_ALIASES = {"normal": "normal", "cyst": "cyst", "stone": "stone", "tumor": "tumor", "tumour": "tumor"}
 
 

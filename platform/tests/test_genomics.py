@@ -3,13 +3,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from kcd_core.contracts import MessageType
+from kcd_core.contracts.messages import DataDelivered
+from kcd_core.pep import PolicyViolation
+
 from kcd.cortex import Cortex
+from kcd.desk import Desk
 from kcd.genomics.panel import PanelError, normalize_classification, parse_panel_json, parse_vcf, zygosity_from_gt
 from kcd.genomics.rules import RulesError, VariantRules, interpret
-from kcd.genomics.source import FolderPanelSource, NoPanel
-from kcd.seatkit import InMemoryGates, InMemoryOutbox, RefusalError
-from kcd.seats.genomics_interpreter import GenomicsInterpreter
-from tests.helpers import DEMO_PANEL, write_panel
+from kcd.genomics.source import FolderPanelSource
+from kcd.seats.genomics_interpreter import GenomicsInterpreter, history_from_summary
+from kcd.tools import genomics_tools
+from tests.helpers import DEMO_PANEL
 
 RCC = {"history": {"rcc": True}}
 
@@ -135,69 +140,99 @@ class RulesTest(unittest.TestCase):
             VariantRules.from_dict(broken)
 
 
-class InterpreterSeatTest(unittest.TestCase):
-    def setUp(self):
+GENOMICS_REQUEST = {"items": [{"kind": "genomics", "code": "genomic_context"}], "reason": "case pack"}
+
+
+class InterpreterSeatTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        write_panel(self.root, "marco-r")
+        panel = json.loads(DEMO_PANEL.read_text())
+        panel["patient_id"] = "pt_marco"
+        (self.root / "pt_marco").mkdir()
+        (self.root / "pt_marco" / "panel.json").write_text(json.dumps(panel))
+        self.desk = await Desk.create()
         self.cortex = Cortex()
-        self.outbox = InMemoryOutbox()
-        self.gates = InMemoryGates()
-        self.seat = GenomicsInterpreter(self.cortex, self.outbox, self.gates, FolderPanelSource(self.root))
+        self.seat = GenomicsInterpreter(self.cortex)
+        self.tools = genomics_tools(FolderPanelSource(self.root),
+                                    patients={"pt_marco": {"conditions": ["Clear cell renal cell carcinoma"]}})
+        self.rt = await self.desk.add_seat(self.seat, self.tools)
 
-    def tearDown(self):
+    async def asyncTearDown(self):
+        await self.desk.close()
         self.tmp.cleanup()
 
-    def test_data_request_to_genomic_context(self):
-        from kcd.contracts import Envelope
-        req = Envelope(type="data_request", sender="dispatcher", to="genomics_interpreter", patient="marco-r",
-                       payload={"what": "genomic_context", "why": "case pack", "context": RCC})
-        out = self.seat.handle(req)
-        env = self.outbox.sent[0]
-        self.assertEqual((env.type, env.to, env.correlation), ("data_delivered", "dispatcher", req.id))
-        self.assertEqual(env.payload["kind"], "genomic_context")
-        self.assertEqual(env.payload["evidence_id"], out["panel_evidence_id"])
-        self.assertEqual(self.gates.opened[0]["gate"], "genetic_disclosure")
-        ev = self.cortex.get_evidence(3, "marco-r", out["panel_evidence_id"])
-        self.assertEqual(self.cortex.read_blob(3, "marco-r", ev["blob_sha256"]), DEMO_PANEL.read_bytes())
-        other = Envelope(type="data_request", sender="dispatcher", to="x", patient="marco-r",
-                         payload={"what": "recent eGFR", "why": "x"})
-        self.assertIsNone(self.seat.handle(other))
+    async def request(self, payload=None, patient="pt_marco"):
+        env = self.desk.envelope(MessageType.DATA_REQUEST, "case_briefer", "genomics_interpreter",
+                                 payload or GENOMICS_REQUEST, patient=patient)
+        await self.desk.deliver(env)
+        return env
 
-    def test_idempotent_per_panel_and_context(self):
-        a = self.seat.interpret("marco-r", context=RCC)
-        self.assertTrue(self.seat.interpret("marco-r", context=RCC)["duplicate"])
-        b = self.seat.interpret("marco-r", context={"history": {}})  # different context: new interpretation
-        self.assertFalse(b["duplicate"])
-        self.assertNotEqual(a["message_id"], b["message_id"])
-        self.assertTrue(self.seat.interpret("marco-r", context={"history": None})["duplicate"])  # same as {}
-        self.assertTrue(self.seat.interpret("marco-r")["duplicate"])
+    def delivered(self):
+        return self.desk.delivered_to("safety_verifier")
 
-    def test_wrong_patient_panel_is_blocked(self):
-        (self.root / "anna-b").mkdir()
-        (self.root / "anna-b" / "panel.json").write_text(DEMO_PANEL.read_text())  # filed under the wrong patient
-        with self.assertRaises(PanelError):
-            self.seat.interpret("anna-b")
-        self.assertEqual(self.outbox.sent, [])
+    def blocked(self):
+        return self.desk.audit.find("seat.policy_violation", "blocked")
 
-    def test_missing_panel(self):
-        with self.assertRaises(NoPanel):
-            self.seat.interpret("nobody")
-        with self.assertRaises(PanelError):
-            self.seat.interpret("../x")
+    async def test_data_request_to_genomic_context(self):
+        req = await self.request()
+        self.assertEqual(self.desk.bus.dead_letters, [])
+        env = self.delivered()[0]
+        self.assertEqual((env.type, env.from_), (MessageType.DATA_DELIVERED, "genomics_interpreter"))
+        dd = DataDelivered.model_validate(env.payload)  # Core's frozen contract
+        self.assertEqual((dd.kind, dd.in_reply_to), ("genomic_context", req.id))
+        summary, *findings = dd.items
+        self.assertEqual(summary["type"], "panel_summary")
+        self.assertEqual({f["gene"]: f["relevance"] for f in findings},
+                         {"VHL": "high", "APOL1": "low", "PBRM1": "none"})
+        self.assertIn("kidney-sparing", " ".join(summary["case_implications"]))  # RCC history from fhir.read_patient
+        self.assertEqual(summary["not_reported"][0]["gene"], "BAP1")
+        self.assertIn("ACMG2015", {c.source for c in dd.citations})
+        panel_ref = dd.evidence[0].ref.removeprefix("cortex:evidence/")
+        ev = self.cortex.get_evidence(3, "pt_marco", panel_ref)
+        self.assertEqual(ev["kind"], "genomic_panel")
+        self.assertEqual(self.cortex.read_blob(3, "pt_marco", ev["blob_sha256"]),
+                         (self.root / "pt_marco" / "panel.json").read_bytes())
 
-    def test_refusals(self):
-        with self.assertRaises(RefusalError) as cm:
-            self.seat.send("data_delivered", "marco-r", {"kind": "genomic_context", "data": {}}, to="patient")
-        self.assertEqual(cm.exception.refusal, "send_to_patient")
-        with self.assertRaises(RefusalError) as cm:
-            self.seat.act("genomics.reclassify")
-        self.assertEqual(cm.exception.refusal, "reclassify_variants")
-        with self.assertRaises(RefusalError) as cm:
-            self.seat.act("patient.disclose_genetics")
-        self.assertEqual(cm.exception.refusal, "disclose_genetics_to_patient")
+    async def test_non_genomics_request_is_ignored(self):
+        await self.request({"items": [{"kind": "lab", "code": "egfr"}], "reason": "x"})
+        self.assertEqual(self.delivered(), [])
+        self.assertEqual(self.cortex.list_evidence(3, "pt_marco"), [])
 
-    def test_reclassification_guard(self):
+    async def test_without_rcc_history_no_kidney_sparing_note(self):
+        summaries = genomics_tools(FolderPanelSource(self.root))  # no conditions known
+        self.rt.tools.register("fhir.read_patient", summaries["fhir.read_patient"])
+        await self.request()
+        summary = DataDelivered.model_validate(self.delivered()[0].payload).items[0]
+        self.assertNotIn("kidney-sparing", " ".join(summary["case_implications"]))
+
+    async def test_redelivery_is_processed_once(self):
+        env = await self.request()
+        await self.rt._on_message(env)  # the bus redelivers the same envelope to the seat
+        await self.desk.bus.drain()
+        self.assertEqual(len(self.delivered()), 1)
+        self.assertEqual(len(self.cortex.list_evidence(3, "pt_marco")), 1)
+
+    async def test_wrong_patient_panel_is_blocked(self):
+        (self.root / "pt_anna").mkdir()
+        (self.root / "pt_anna" / "panel.json").write_text(DEMO_PANEL.read_text())  # says marco-r inside
+        await self.request(patient="pt_anna")
+        self.assertIn("different patient", self.blocked()[0].detail["error"])
+        self.assertEqual(self.delivered(), [])
+        self.assertEqual(self.cortex.list_evidence(3, "pt_anna"), [])
+
+    async def test_policy(self):
+        ctx = self.rt.context()
+        for tool, refusal in (("genomics.write_classification", "no_variant_reclassification"),
+                              ("channel.send_message", "no_patient_contact")):
+            with self.assertRaises(PolicyViolation) as cm:
+                ctx.pep.check_tool(tool)
+            self.assertEqual(cm.exception.refusal, refusal)
+        with self.assertRaises(PolicyViolation) as cm:
+            ctx.guard_content("genomic_result")
+        self.assertEqual(cm.exception.refusal, "no_result_disclosure")
+
+    async def test_reclassification_guard(self):
         import kcd.seats.genomics_interpreter as mod
         real = mod.interpret
 
@@ -208,12 +243,17 @@ class InterpreterSeatTest(unittest.TestCase):
 
         mod.interpret = tampering
         try:
-            with self.assertRaises(RefusalError) as cm:
-                self.seat.interpret("marco-r", context=RCC)
-            self.assertEqual(cm.exception.refusal, "reclassify_variants")
-            self.assertEqual(self.outbox.sent, [])
+            await self.request()
         finally:
             mod.interpret = real
+        self.assertIn("VHL classification differs from the laboratory", self.blocked()[0].detail["error"])
+        self.assertEqual(self.delivered(), [])
+
+    def test_history_from_summary(self):
+        self.assertEqual(history_from_summary({"conditions": ["RCC, post nephrectomy"]}), {"rcc": True})
+        self.assertEqual(history_from_summary({"conditions": [{"display": "Clear-cell carcinoma"}]}), {"rcc": True})
+        self.assertEqual(history_from_summary({"conditions": ["CKD G3a"]}), {"rcc": False})
+        self.assertEqual(history_from_summary(None), {"rcc": False})
 
 
 if __name__ == "__main__":
