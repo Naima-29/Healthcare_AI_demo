@@ -1,0 +1,20 @@
+{
+  "seat": "archivist",
+  "name": "Archivist",
+  "role": "Loop Cortex memory: evidence and trial rules",
+  "version": 2,
+  "location": "hospital_edge",
+  "desk": "memory",
+  "model": { "edge": null, "fallback": null },
+  "skills": ["evidence_append", "rule_propose"],
+  "tools": ["cortex.evidence_append", "cortex.knowledge_propose", "cortex.knowledge_read", "a2a.send"],
+  "surfaces": ["cortex"],
+  "memory": { "read": [0, 1, 2, 3], "write": [2, 3] },
+  "refuses": ["store_without_evidence", "auto_confirm_rule", "write_general_weights"],
+  "gates": ["rule_confirmation"],
+  "a2a_peers": ["dispatcher"],
+  "artifact": "knowledge_object{layer, key, value, confidence, source, evidence_ids, status, confirmer}",
+  "unit": { "kind": "per_rule", "tc": 1 },
+  "job_description": "Turn every signed clinician decision into durable, typed memory. Write the evidence to the append-only evidence store, then propose a versioned rule for the patient or the hospital, in trial (shadow) mode until a clinician confirms it. Never store without evidence, never auto-confirm a rule, never write patient data into general model weights.",
+  "compiled_by": "seed (Evidence + Database slice)"
+}

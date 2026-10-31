@@ -1,0 +1,37 @@
+name: evals
+
+on:
+  push:
+    paths: ["platform/**", ".github/workflows/evals.yml"]
+  pull_request:
+    paths: ["platform/**", ".github/workflows/evals.yml"]
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install "numpy>=1.26" "pillow>=10.0" "sqlalchemy>=2.0"
+      - name: Unit tests
+        run: python -W error -m unittest discover -s tests -t . -v
+      - name: Validate datasets
+        run: |
+          python -m evals validate red_flags
+          python -m evals validate genomics_relevance
+      # No --gate while the dataset is a draft; add it once the clinical lead has reviewed the labels.
+      - name: Red-flag baseline
+        run: python -m evals run red_flags --target rules_baseline
+      # Regression check: the variant rules must keep agreeing with the agreed labels.
+      - name: Genomics rules
+        run: python -m evals run genomics_relevance --target genomics_rules --gate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: platform/reports/

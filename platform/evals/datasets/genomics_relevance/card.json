@@ -1,0 +1,22 @@
+{
+  "name": "genomics_relevance",
+  "version": "0.1.0",
+  "task": "variant_relevance",
+  "label_field": "relevance",
+  "labels": ["high", "moderate", "review", "unknown", "low", "none", "filtered"],
+  "description": "Synthetic panels for a patient in kidney / RCC follow-up. Label = clinical relevance of the target gene's variant for the case pack. The laboratory classification is never changed.",
+  "label_guide": {
+    "high": "Pathogenic / likely pathogenic variant in a hereditary RCC gene (VHL, FH, FLCN, MET, BAP1, SDHx, TSC1/2, PTEN).",
+    "moderate": "APOL1 high-risk genotype (two risk alleles).",
+    "review": "Pathogenic / likely pathogenic / risk allele without a gene-specific rule: geneticist review.",
+    "unknown": "Laboratory classification not recognised.",
+    "low": "Single APOL1 risk allele.",
+    "none": "Variant of uncertain significance.",
+    "filtered": "Benign / likely benign: not reported."
+  },
+  "source": "Hand-written by the Evidence + Database owner. Synthetic, no patient data.",
+  "labeller": "Naima (draft)",
+  "review_status": "draft",
+  "created": "2026-10-25",
+  "thresholds": { "accuracy": 1.0 }
+}

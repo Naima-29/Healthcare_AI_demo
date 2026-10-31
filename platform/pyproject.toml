@@ -1,0 +1,20 @@
+[project]
+name = "kcd-platform"
+version = "0.1.0"
+description = "Kidney Care Desk, real system (Loop AI Labs): evaluation harness and the Evidence + Database slice."
+requires-python = ">=3.12"
+dependencies = ["numpy>=1.26", "pillow>=10.0", "sqlalchemy>=2.0"]
+
+[project.optional-dependencies]
+dicom = ["pydicom>=2.4"]
+postgres = ["psycopg[binary]>=3.1"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
