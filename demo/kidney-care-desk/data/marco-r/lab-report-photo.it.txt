@@ -1,0 +1,11 @@
+LABORATORIO ANALISI CLINICHE - SEDE MILANO NORD
+Paziente: R. Marco        Data prelievo: 05/10/2026
+---------------------------------------------------
+CREATININA SIERICA        1,46 mg/dL     (0,70 - 1,20)  *
+eGFR (CKD-EPI 2021)       56   mL/min/1,73m2   (> 90)   *
+AZOTEMIA                  48   mg/dL     (10 - 50)
+POTASSIO                  4,9  mmol/L    (3,5 - 5,1)
+EMOGLOBINA                12,1 g/dL      (13,5 - 17,5)  *
+ESAME URINE: emazie       ++
+---------------------------------------------------
+Referto firmato digitalmente

@@ -33,9 +33,13 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+extend-exclude = ["demo"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+"core/kcd_core/chief_of_staff/patterns.py" = ["E501"]  # regexes ported verbatim from the demo
 
 [tool.mypy]
 python_version = "3.11"

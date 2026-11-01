@@ -1,45 +1,49 @@
 {
   "seat": "chief_of_staff",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Chief of Staff",
+  "role": "The Hospital Director's assistant: turns plain-language requests into seat manifests",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "direction",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "loopq-clin-4b",
+    "fallback": null
   },
-  "skills": [],
+  "skills": [
+    "compile_job_description",
+    "manifest_diff",
+    "seat_performance_report"
+  ],
   "tools": [
-    "control_plane.propose_manifest"
+    "control_plane.propose_manifest",
+    "km.query"
   ],
   "surfaces": [
-    "director_console"
+    "control_plane",
+    "km"
   ],
   "memory": {
-    "read": [
-      "L0",
-      "L3"
-    ],
-    "write": [
-      "L0"
-    ]
+    "read": [0, 2],
+    "write": []
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact",
-    "no_self_activation"
+    "activate_without_approval",
+    "answer_patient_directly",
+    "decide",
+    "transmit_identifiable_external"
   ],
   "gates": [
-    {
-      "artifact": "manifest_change",
-      "signer_role": "director"
-    }
+    "director_approval"
   ],
   "a2a_peers": [],
   "consumes": [],
   "emits": [],
-  "artifact": null,
-  "unit": "direction",
-  "job_description": "Turn the Hospital Director's plain-language requests into manifest drafts with a diff. Never activate a manifest; the Director approves."
+  "artifact": "manifest_draft",
+  "unit": {
+    "kind": "per_compile",
+    "tc": 2
+  },
+  "job_description": "Assist the Hospital Director. Turn plain-language requests (what to automate, which rule to add) into a seat manifest draft with a readable diff against the live version. Refusals found in the text are a safety floor and are never dropped. Never put a manifest live: the Director approves every change. Never answer the patient directly and never take a clinical decision.",
+  "compiled_by": "core (seed)",
+  "compiled_at": "2026-10-31T00:00:00Z"
 }

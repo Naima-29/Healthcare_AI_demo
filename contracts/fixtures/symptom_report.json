@@ -1,35 +1,59 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
       "symptoms": [
         {
           "code": "flank_pain",
-          "label": "Flank pain",
-          "severity": 6,
-          "source_text": "my side hurts since yesterday"
+          "label": "flank pain"
+        },
+        {
+          "code": "visible_hematuria",
+          "label": "visible blood in urine"
+        },
+        {
+          "code": "pain_score",
+          "label": "pain 8/10"
         }
       ],
-      "language": "it",
-      "channel": "telegram",
-      "distress_score": 0.4
+      "distress": {
+        "score": 0.78,
+        "level": "high",
+        "face": 0.71,
+        "voice": 0.66,
+        "verbal": 0.2
+      },
+      "underreporting": true,
+      "transcript": "it's nothing serious, just a bit of pain in my side / there was some blood when I peed"
     }
   ],
   "invalid": [
     {
       "symptoms": [],
-      "language": "it",
-      "channel": "telegram"
+      "distress": {
+        "score": 0.1,
+        "level": "low"
+      }
     },
     {
       "symptoms": [
         {
           "code": "x",
-          "label": "x",
-          "severity": 11
+          "label": "x"
         }
       ],
-      "language": "it",
-      "channel": "telegram"
+      "distress": {
+        "score": 1.4,
+        "level": "low"
+      }
+    },
+    {
+      "symptoms": [
+        {
+          "code": "x",
+          "label": "x"
+        }
+      ]
     }
   ]
 }

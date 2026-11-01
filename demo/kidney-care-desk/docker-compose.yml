@@ -1,0 +1,43 @@
+# "Robust demo" profile: the desk + real infrastructure on one edge node.
+#   docker compose up -d            -> desk only (synthetic data)
+#   docker compose --profile live up -d   -> + Ollama (edge SLM), HAPI FHIR, Orthanc PACS
+# After the first start of the live profile:
+#   docker exec -it kcd-ollama ollama pull qwen3:4b
+#   node scripts/seed-live.mjs      (loads the synthetic patient into HAPI + Orthanc)
+services:
+  desk:
+    build: .
+    container_name: kcd-desk
+    ports: ["5173:5173"]
+    env_file:
+      - path: .env
+        required: false
+    # Inside compose, point .env at the service names:
+    #   EDGE_LLM_BASE_URL=http://ollama:11434/v1  FHIR_BASE_URL=http://fhir:8080/fhir  DICOMWEB_URL=http://pacs:8042/dicom-web
+    volumes: ["./data/runtime:/app/data/runtime"]
+    restart: unless-stopped
+
+  ollama:
+    profiles: [live]
+    image: ollama/ollama:latest
+    container_name: kcd-ollama
+    ports: ["11434:11434"]
+    volumes: ["ollama:/root/.ollama"]
+
+  fhir:
+    profiles: [live]
+    image: hapiproject/hapi:latest
+    container_name: kcd-fhir
+    ports: ["8080:8080"]
+
+  pacs:
+    profiles: [live]
+    image: orthancteam/orthanc:latest
+    container_name: kcd-pacs
+    ports: ["8042:8042", "4242:4242"]
+    environment:
+      ORTHANC__DICOM_WEB__ENABLE: "true"
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+
+volumes:
+  ollama: {}

@@ -1,129 +1,277 @@
 {
-  "version": "1.0.0",
-  "surfaces": [
-    "patient_channel",
-    "clinical_board",
-    "director_console"
+  "version": "2.0.0",
+  "source": "Vocabulary from demo/kidney-care-desk/contracts/catalog.mjs (v2 demo). Core additions: refusal activate_without_approval, gate director_approval, surface control_plane, and tool_actions.",
+  "content_classes": [
+    "diagnosis_claim",
+    "imaging_result",
+    "dose_instruction",
+    "prescription",
+    "genetic_result"
   ],
-  "gate_roles": [
-    "clinician:nephrology",
-    "clinician:radiology",
-    "clinician:urology_oncology",
-    "clinician:genetics",
-    "director"
-  ],
-  "tools": {
-    "channel.send_message": {
-      "server": "channel",
-      "surface": "patient_channel"
+  "refusals": {
+    "diagnose": {
+      "label": "Never diagnose",
+      "actions": [
+        "patient.state_diagnosis"
+      ],
+      "content": [
+        "diagnosis_claim"
+      ]
     },
-    "fhir.read_patient": {
-      "server": "fhir"
+    "prescribe": {
+      "label": "Never prescribe",
+      "actions": [
+        "medication.prescribe"
+      ],
+      "content": [
+        "prescription"
+      ]
     },
-    "fhir.read_observations": {
-      "server": "fhir"
+    "change_dose": {
+      "label": "Never change or stop a dose",
+      "actions": [
+        "medication.change_dose"
+      ],
+      "content": [
+        "dose_instruction"
+      ]
     },
-    "fhir.read_medications": {
-      "server": "fhir"
+    "disclose_imaging_before_review": {
+      "label": "Never disclose an imaging result before clinician review",
+      "actions": [
+        "patient.disclose_imaging"
+      ],
+      "content": [
+        "imaging_result"
+      ]
     },
-    "fhir.write_medication_request": {
-      "server": "fhir"
+    "disclose_genetics_to_patient": {
+      "label": "Never disclose genetic findings to the patient",
+      "actions": [
+        "patient.disclose_genetics"
+      ],
+      "content": [
+        "genetic_result"
+      ]
     },
-    "pacs.fetch_study": {
-      "server": "pacs"
+    "contact_clinician_directly": {
+      "label": "Never contact a clinician directly (only via Dispatcher)",
+      "actions": [
+        "clinician.direct_message"
+      ],
+      "content": []
     },
-    "ct.classify": {
-      "server": "ct"
+    "answer_patient_directly": {
+      "label": "Never answer the patient directly",
+      "actions": [
+        "patient.send"
+      ],
+      "content": []
     },
-    "genomics.read_panel": {
-      "server": "genomics"
+    "rank_clinicians": {
+      "label": "Never rank clinicians by measured behaviour",
+      "actions": [
+        "routing.rank_people"
+      ],
+      "content": []
     },
-    "genomics.write_classification": {
-      "server": "genomics"
+    "label_as_diagnosis": {
+      "label": "Never call a model output a diagnosis",
+      "actions": [
+        "imaging.label_diagnosis"
+      ],
+      "content": [
+        "diagnosis_claim"
+      ]
     },
-    "wearables.read_series": {
-      "server": "wearables"
+    "report_to_patient": {
+      "label": "Never report to the patient",
+      "actions": [
+        "patient.send",
+        "patient.disclose_imaging"
+      ],
+      "content": []
     },
-    "lab.read_results": {
-      "server": "lab"
+    "alter_image": {
+      "label": "Never alter an image",
+      "actions": [
+        "pacs.write"
+      ],
+      "content": []
     },
-    "km.lookup": {
-      "server": "km"
+    "reclassify_variants": {
+      "label": "Never reclassify a variant",
+      "actions": [
+        "genomics.reclassify"
+      ],
+      "content": []
     },
-    "oncall.who_is_on_call": {
-      "server": "oncall"
+    "pass_failed_check": {
+      "label": "Never pass a failed check",
+      "actions": [
+        "verifier.override"
+      ],
+      "content": []
     },
-    "oncall.page": {
-      "server": "oncall"
+    "alter_record": {
+      "label": "Never alter a clinical record",
+      "actions": [
+        "fhir.write",
+        "pacs.write"
+      ],
+      "content": []
     },
-    "deid.anonymise": {
-      "server": "deid"
+    "decide": {
+      "label": "Never take the clinical decision",
+      "actions": [
+        "case.decide"
+      ],
+      "content": []
     },
-    "cloud_llm.complete_deidentified": {
-      "server": "cloud_gateway"
+    "send_to_patient": {
+      "label": "Never send anything to the patient",
+      "actions": [
+        "patient.send"
+      ],
+      "content": []
     },
-    "cloud_llm.complete_raw": {
-      "server": "cloud_gateway"
+    "store_without_evidence": {
+      "label": "Never store a rule without evidence",
+      "actions": [
+        "cortex.store_unevidenced"
+      ],
+      "content": []
     },
-    "board.publish_case_pack": {
-      "server": "board",
-      "surface": "clinical_board"
+    "auto_confirm_rule": {
+      "label": "Never auto-confirm a rule",
+      "actions": [
+        "cortex.confirm_rule"
+      ],
+      "content": []
     },
-    "control_plane.propose_manifest": {
-      "server": "control_plane",
-      "surface": "director_console"
+    "write_general_weights": {
+      "label": "Never write patient data into general model weights",
+      "actions": [
+        "model.train_general"
+      ],
+      "content": []
     },
-    "control_plane.activate_manifest": {
-      "server": "control_plane"
+    "transmit_identifiable_external": {
+      "label": "Never send identifiable data outside the perimeter",
+      "actions": [
+        "llm.external_identifiable"
+      ],
+      "content": []
+    },
+    "activate_without_approval": {
+      "label": "Never put a manifest live without the Director's approval",
+      "actions": [
+        "manifest.activate"
+      ],
+      "content": []
     }
   },
-  "refusals": {
-    "no_diagnosis": {
-      "description": "Never state a diagnosis that a clinician has not released.",
-      "release_gated_content": [
-        "diagnosis"
-      ]
+  "gates": {
+    "clinical_advice": {
+      "label": "Any clinical advice to the patient",
+      "signer": "treating_clinician"
     },
-    "no_prescribing": {
-      "description": "Never prescribe, start, stop or change a dose.",
-      "blocked_tools": [
-        "fhir.write_medication_request"
-      ],
-      "release_gated_content": [
-        "dose"
-      ]
+    "urgent_ack": {
+      "label": "Urgent escalation acknowledged",
+      "signer": "oncall_clinician"
     },
-    "no_result_disclosure": {
-      "description": "Never tell the patient a result before a clinician releases it.",
-      "release_gated_content": [
-        "imaging_result",
-        "lab_interpretation",
-        "genomic_result"
-      ]
+    "radiologist_review": {
+      "label": "Imaging signal reviewed",
+      "signer": "radiologist"
     },
-    "no_variant_reclassification": {
-      "description": "Report variant classes from the Knowledge Model only; never reclassify.",
-      "blocked_tools": [
-        "genomics.write_classification"
-      ]
+    "genetic_disclosure": {
+      "label": "Genetic findings disclosed",
+      "signer": "geneticist"
     },
-    "no_identifiable_data_to_cloud": {
-      "description": "Identifiable data never leaves the hospital edge.",
-      "blocked_tools": [
-        "cloud_llm.complete_raw"
-      ]
+    "nephrologist_review": {
+      "label": "Medication change reviewed",
+      "signer": "nephrologist"
     },
-    "no_patient_contact": {
-      "description": "Only the Companion talks to the patient.",
-      "blocked_tools": [
-        "channel.send_message"
-      ]
+    "clinician_signoff": {
+      "label": "Case pack signed",
+      "signer": "treating_clinician"
     },
-    "no_self_activation": {
-      "description": "A manifest goes live only after the Director approves it.",
-      "blocked_tools": [
-        "control_plane.activate_manifest"
-      ]
+    "rule_confirmation": {
+      "label": "New rule confirmed",
+      "signer": "clinician"
+    },
+    "none": {
+      "label": "No human gate (automatic)",
+      "signer": null
+    },
+    "director_approval": {
+      "label": "Manifest change approved by the Director",
+      "signer": "director"
     }
+  },
+  "surfaces": {
+    "fhir": [
+      "fhir.get_patient",
+      "fhir.get_observations",
+      "fhir.get_conditions",
+      "fhir.get_medications"
+    ],
+    "pacs": [
+      "pacs.list_studies",
+      "pacs.fetch_study"
+    ],
+    "imaging": [
+      "ct.classify",
+      "ct.gradcam_heatmap",
+      "ct.quality_ood_check"
+    ],
+    "lab": [
+      "lab.parse_report",
+      "lab.latest"
+    ],
+    "genomics": [
+      "genomics.get_panel"
+    ],
+    "wearables": [
+      "wearables.read"
+    ],
+    "oncall": [
+      "oncall.who_is_on_call",
+      "oncall.page"
+    ],
+    "channel": [
+      "channel.send",
+      "channel.receive"
+    ],
+    "km": [
+      "km.query",
+      "km.check_conflicts",
+      "km.red_flags",
+      "km.interpret_variant",
+      "km.ckd_stage"
+    ],
+    "cortex": [
+      "cortex.evidence_append",
+      "cortex.knowledge_propose",
+      "cortex.knowledge_read"
+    ],
+    "control_plane": [
+      "control_plane.propose_manifest",
+      "control_plane.activate_manifest"
+    ]
+  },
+  "internal_tools": [
+    "a2a.send",
+    "a2a.endpoint",
+    "board.create_item",
+    "board.update_item"
+  ],
+  "tool_actions": {
+    "channel.send": [
+      "patient.send"
+    ],
+    "control_plane.activate_manifest": [
+      "manifest.activate"
+    ]
   }
 }

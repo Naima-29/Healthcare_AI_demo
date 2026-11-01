@@ -41,22 +41,38 @@
   },
   "additionalProperties": false,
   "properties": {
+    "ask_patient": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Set when the patient should be asked (routes to Companion)",
+      "title": "Ask Patient"
+    },
     "items": {
       "items": {
         "$ref": "#/$defs/RequestedItem"
       },
-      "minItems": 1,
       "title": "Items",
       "type": "array"
     },
-    "reason": {
-      "title": "Reason",
+    "what": {
+      "title": "What",
+      "type": "string"
+    },
+    "why": {
+      "title": "Why",
       "type": "string"
     }
   },
   "required": [
-    "items",
-    "reason"
+    "what",
+    "why"
   ],
   "title": "DataRequest",
   "type": "object"

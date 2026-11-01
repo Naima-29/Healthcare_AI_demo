@@ -1,4 +1,8 @@
-"""Contract C1: the seat manifest, the single source of truth for what a seat may do."""
+"""Contract C1: the seat manifest, the single source of truth for what a seat may do.
+
+Shape follows the v2 demo (`contracts/manifestSchema.mjs`). Core adds `consumes` / `emits`: the Dispatcher
+derives its routing table from them, so there is no hand-written routing switch.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .envelope import SEAT_ID_PATTERN
 from .messages import MessageType
 
-MemoryLayer = Literal["L0", "L1", "L2", "L3"]
-"""L0 episode working memory, L1 patient evidence, L2 patient knowledge, L3 shared hospital knowledge."""
+MemoryLayer = Literal[0, 1, 2, 3]
+"""Cortex layers: 0-1 licensed knowledge (read-only for seats), 2 hospital partition, 3 patient partition."""
 
-SEMVER = r"^\d+\.\d+\.\d+$"
+READ_ONLY_LAYERS: frozenset[int] = frozenset({0, 1})
 
 
 class _Strict(BaseModel):
@@ -20,50 +24,69 @@ class _Strict(BaseModel):
 
 
 class ModelSpec(_Strict):
-    provider: Literal["vllm", "ollama", "cloud_deidentified", "none"]
-    name: str
+    edge: str = Field(description="Edge model id, or 'none' for a deterministic seat")
+    fallback: str | None = Field(default=None, description="Cloud fallback; only ever sees de-identified data")
+
+
+class Humanized(_Strict):
+    audio: str | None = None
+    video: str | None = None
+    text: str | None = None
+    fuzzy: str | None = None
 
 
 class MemoryScopes(_Strict):
     read: list[MemoryLayer] = Field(default_factory=list)
     write: list[MemoryLayer] = Field(default_factory=list)
+    partition: str | None = None
+
+    @model_validator(mode="after")
+    def _scopes(self) -> MemoryScopes:
+        if missing := set(self.write) - set(self.read):
+            raise ValueError(f"cannot write layers {sorted(missing)} without reading them")
+        if licensed := set(self.write) & READ_ONLY_LAYERS:
+            raise ValueError(f"layers {sorted(licensed)} are licensed knowledge, read-only for seats")
+        return self
 
 
-class GateSpec(_Strict):
-    artifact: str = Field(description="Artifact kind held for review, e.g. 'case_pack'")
-    signer_role: str = Field(description="Role that must sign, e.g. 'clinician:radiology'")
+class Unit(_Strict):
+    kind: str = Field(description="Billing unit, e.g. 'per_check'")
+    tc: float = Field(ge=0, description="Token-credits per unit")
 
 
 class Manifest(_Strict):
     seat: str = Field(pattern=SEAT_ID_PATTERN)
-    version: str = Field(pattern=SEMVER)
-    location: Literal["edge", "device", "cloud"]
+    name: str = Field(min_length=2)
+    role: str | None = None
+    version: int = Field(ge=1)
+    location: Literal["patient_edge", "hospital_edge"]
+    desk: str | None = None
     model: ModelSpec
+    humanized: Humanized | None = None
     skills: list[str] = Field(default_factory=list)
     tools: list[str] = Field(default_factory=list)
     surfaces: list[str] = Field(default_factory=list)
     memory: MemoryScopes = Field(default_factory=MemoryScopes)
     refuses: list[str] = Field(default_factory=list)
-    gates: list[GateSpec] = Field(default_factory=list)
-    a2a_peers: list[str] = Field(default_factory=list)
-    # consumes / emits are an addition to the demo's C1: the dispatcher derives its routing table from them.
+    safety_script: str | None = None
+    gates: list[str] = Field(min_length=1, description="Gate ids from the catalogue; ['none'] if automatic")
+    a2a_peers: list[str] = Field(default_factory=list, description="Seats this seat may address (via the Dispatcher)")
     consumes: list[MessageType] = Field(default_factory=list)
     emits: list[MessageType] = Field(default_factory=list)
     artifact: str | None = None
-    unit: str
-    job_description: str
+    unit: Unit
+    job_description: str = Field(min_length=20)
+    compiled_by: str | None = None
+    compiled_at: str | None = None
 
     @property
     def ref(self) -> str:
-        return f"{self.seat}@{self.version}"
+        return f"{self.seat}@v{self.version}"
 
     @model_validator(mode="after")
     def _no_duplicates(self) -> Manifest:
-        for name in ("tools", "surfaces", "refuses", "a2a_peers", "consumes", "emits"):
+        for name in ("tools", "surfaces", "refuses", "gates", "a2a_peers", "consumes", "emits"):
             values = getattr(self, name)
             if len(values) != len(set(values)):
                 raise ValueError(f"duplicate entries in '{name}'")
-        if not set(self.memory.write) <= set(self.memory.read) | {"L0"}:
-            # Writing a layer you cannot read makes the seat blind to its own output; almost always a typo.
-            raise ValueError("memory.write must be a subset of memory.read (L0 excepted)")
         return self

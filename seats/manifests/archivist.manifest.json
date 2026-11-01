@@ -1,45 +1,63 @@
 {
   "seat": "archivist",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Archivist",
+  "role": "Loop Cortex memory",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "memoria",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "loopq-clin-4b",
+    "fallback": null
   },
-  "skills": [],
-  "tools": [
-    "km.lookup"
+  "skills": [
+    "evidence_append",
+    "rule_propose",
+    "decay"
   ],
-  "surfaces": [],
+  "tools": [
+    "cortex.evidence_append",
+    "cortex.knowledge_propose",
+    "cortex.knowledge_read",
+    "board.create_item",
+    "a2a.send"
+  ],
+  "surfaces": [
+    "cortex"
+  ],
   "memory": {
     "read": [
-      "L0",
-      "L1",
-      "L2"
+      0,
+      1,
+      2,
+      3
     ],
     "write": [
-      "L0",
-      "L2"
+      2,
+      3
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "store_without_evidence",
+    "auto_confirm_rule",
+    "write_general_weights"
   ],
-  "gates": [],
-  "a2a_peers": [
-    "dispatcher"
+  "gates": [
+    "rule_confirmation"
   ],
+  "a2a_peers": [],
+  "artifact": "knowledge_object{scope, value, conf, source, confirmer}",
+  "unit": {
+    "kind": "per_rule",
+    "tc": 1
+  },
+  "job_description": "Turn every confirmed resolution into durable, typed memory. Write the evidence to the append-only evidence store, then propose a versioned rule for the patient or the hospital, in shadow mode until a clinician confirms it. Never store without evidence, never auto-confirm a rule, never write patient data into general model weights.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
+  "emits": [],
   "consumes": [
-    "clinician_decision"
-  ],
-  "emits": [
-    "acknowledgment"
-  ],
-  "artifact": null,
-  "unit": "nephrology",
-  "job_description": "Turn signed clinician decisions into shadow memory rules for that patient; they apply only after a clinician confirms them."
+    "acknowledgment",
+    "clinician_decision",
+    "data_delivered",
+    "red_flag_escalation"
+  ]
 }

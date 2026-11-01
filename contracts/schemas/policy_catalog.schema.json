@@ -1,43 +1,13 @@
 {
   "$defs": {
-    "Refusal": {
+    "Gate": {
       "additionalProperties": false,
       "properties": {
-        "blocked_tools": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Blocked Tools",
-          "type": "array"
-        },
-        "description": {
-          "title": "Description",
+        "label": {
+          "title": "Label",
           "type": "string"
         },
-        "release_gated_content": {
-          "description": "Content classes the seat may only emit when backed by a valid clinician release",
-          "items": {
-            "type": "string"
-          },
-          "title": "Release Gated Content",
-          "type": "array"
-        }
-      },
-      "required": [
-        "description"
-      ],
-      "title": "Refusal",
-      "type": "object"
-    },
-    "ToolSpec": {
-      "additionalProperties": false,
-      "properties": {
-        "server": {
-          "description": "MCP server that serves the tool",
-          "title": "Server",
-          "type": "string"
-        },
-        "surface": {
+        "signer": {
           "anyOf": [
             {
               "type": "string"
@@ -46,25 +16,69 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "description": "Surface the tool writes to, if any",
-          "title": "Surface"
+          "description": "Role that must sign; null means no human gate",
+          "title": "Signer"
         }
       },
       "required": [
-        "server"
+        "label",
+        "signer"
       ],
-      "title": "ToolSpec",
+      "title": "Gate",
+      "type": "object"
+    },
+    "Refusal": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "content": {
+          "description": "Content classes allowed only with a valid release",
+          "items": {
+            "type": "string"
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "Refusal",
       "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
-    "gate_roles": {
+    "content_classes": {
       "items": {
         "type": "string"
       },
-      "title": "Gate Roles",
+      "title": "Content Classes",
+      "type": "array"
+    },
+    "gates": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Gate"
+      },
+      "title": "Gates",
+      "type": "object"
+    },
+    "internal_tools": {
+      "description": "Runtime tools with no MCP surface",
+      "items": {
+        "type": "string"
+      },
+      "title": "Internal Tools",
       "type": "array"
     },
     "refusals": {
@@ -74,18 +88,38 @@
       "title": "Refusals",
       "type": "object"
     },
-    "surfaces": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Surfaces",
-      "type": "array"
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
     },
-    "tools": {
+    "surfaces": {
       "additionalProperties": {
-        "$ref": "#/$defs/ToolSpec"
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
-      "title": "Tools",
+      "description": "MCP server -> its tools",
+      "title": "Surfaces",
+      "type": "object"
+    },
+    "tool_actions": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "Tool -> actions it performs",
+      "title": "Tool Actions",
       "type": "object"
     },
     "version": {
@@ -96,9 +130,9 @@
   "required": [
     "version",
     "refusals",
-    "tools",
-    "surfaces",
-    "gate_roles"
+    "content_classes",
+    "gates",
+    "surfaces"
   ],
   "title": "PolicyCatalog",
   "type": "object"

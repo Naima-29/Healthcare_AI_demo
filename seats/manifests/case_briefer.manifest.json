@@ -1,61 +1,74 @@
 {
   "seat": "case_briefer",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Case Briefer",
+  "role": "Doctor Agent - the clinicians' agent on the Clinical Board",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "mdt",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "loopq-clin-4b",
+    "fallback": "kimi (de-identified only)"
   },
-  "skills": [],
+  "skills": [
+    "sbar",
+    "timeline",
+    "cite_options"
+  ],
   "tools": [
-    "board.publish_case_pack",
-    "km.lookup"
+    "fhir.get_patient",
+    "fhir.get_conditions",
+    "fhir.get_medications",
+    "fhir.get_observations",
+    "board.create_item",
+    "board.update_item",
+    "a2a.send"
   ],
   "surfaces": [
-    "clinical_board"
+    "fhir"
   ],
   "memory": {
     "read": [
-      "L0",
-      "L1",
-      "L2"
+      0,
+      1,
+      2,
+      3
     ],
     "write": [
-      "L0"
+      3
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "decide",
+    "send_to_patient"
   ],
   "gates": [
-    {
-      "artifact": "case_pack",
-      "signer_role": "clinician:nephrology"
-    }
+    "clinician_signoff"
   ],
   "a2a_peers": [
-    "dispatcher",
-    "companion",
     "archivist",
+    "companion",
+    "dispatcher",
     "genomics_interpreter"
   ],
-  "consumes": [
-    "therapy_conflict",
-    "imaging_signal",
-    "data_delivered",
-    "red_flag_escalation",
-    "acknowledgment"
-  ],
+  "artifact": "case_pack (SBAR)",
+  "unit": {
+    "kind": "per_case_pack",
+    "tc": 25
+  },
+  "job_description": "Be the clinicians' agent on the Clinical Board. Assemble one case pack per episode in SBAR form: situation, background from the record, assessment from every seat (red flags, distress, conflicts, imaging signal, genomic context) and options with their citations. Never decide and never send anything to the patient: the treating clinician edits and signs the decision.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
   "emits": [
     "case_pack_ready",
     "clinician_decision",
     "data_request"
   ],
-  "artifact": "case_pack",
-  "unit": "nephrology",
-  "job_description": "Assemble verified findings into one SBAR case pack for the right clinician, with every sentence linked to evidence. Emit the clinician's signed decision."
+  "consumes": [
+    "acknowledgment",
+    "data_delivered",
+    "imaging_signal",
+    "red_flag_escalation",
+    "symptom_report",
+    "therapy_conflict"
+  ]
 }

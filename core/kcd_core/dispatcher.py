@@ -40,7 +40,10 @@ class InMemoryIdempotencyStore:
 
 
 class GatePort(Protocol):
-    """Gate service (review queue on the Clinical Board). Implemented with Person 5."""
+    """Gate service (review queue on the Clinical Board). Implemented with Person 5.
+
+    Must be idempotent on (case_id, version): a bus retry can call it again for the same message.
+    """
 
     async def open_gate(self, env: Envelope, pack: CasePackReady) -> None: ...
 
@@ -57,11 +60,13 @@ class Dispatcher:
         escalations: EscalationService,
         gates: GatePort,
         idempotency: IdempotencyStore | None = None,
+        default_unit: str = "uro_oncology",
     ) -> None:
         self.bus, self.registry, self.seat_keys = bus, registry, seat_keys
         self.audit, self.clock = audit, clock
         self.escalations, self.gates = escalations, gates
         self.idempotency = idempotency or InMemoryIdempotencyStore()
+        self.default_unit = default_unit
 
     async def start(self) -> None:
         await self.bus.subscribe(DISPATCHER_INBOX, self.on_message)
@@ -80,7 +85,7 @@ class Dispatcher:
             return
 
         if isinstance(payload, RedFlagEscalation):
-            esc = await self.escalations.open(env, unit=payload.unit)
+            esc = await self.escalations.open(env, unit=payload.unit or self.default_unit)
             self._audit(env, "dispatch.escalation_opened", "info", {"escalation_id": esc.id})
 
         if env.to == DISPATCHER:
@@ -95,7 +100,7 @@ class Dispatcher:
         if env.type == MessageType.CASE_PACK_READY:
             pack = CasePackReady.model_validate(env.payload)
             await self.gates.open_gate(env, pack)
-            self._audit(env, "dispatch.gate_opened", "info", {"artifact_id": pack.artifact_id})
+            self._audit(env, "dispatch.gate_opened", "info", {"case_id": pack.case_id, "version": pack.version})
         else:
             self._audit(env, "dispatch.consumed", "info")
 

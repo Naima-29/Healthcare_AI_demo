@@ -1,5 +1,44 @@
 {
   "$defs": {
+    "Distress": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "default": null,
+          "description": "Facial features (e.g. PSPI) behind the score",
+          "title": "Face"
+        },
+        "level": {
+          "enum": [
+            "low",
+            "moderate",
+            "high"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "verbal": {
+          "default": null,
+          "title": "Verbal"
+        },
+        "voice": {
+          "default": null,
+          "title": "Voice"
+        }
+      },
+      "required": [
+        "score",
+        "level"
+      ],
+      "title": "Distress",
+      "type": "object"
+    },
     "EvidenceRef": {
       "additionalProperties": false,
       "properties": {
@@ -10,7 +49,8 @@
             "study",
             "document",
             "variant",
-            "series"
+            "series",
+            "evidence"
           ],
           "title": "Kind",
           "type": "string"
@@ -31,7 +71,6 @@
       "additionalProperties": false,
       "properties": {
         "code": {
-          "description": "Internal or SNOMED code",
           "title": "Code",
           "type": "string"
         },
@@ -52,10 +91,18 @@
           "title": "Onset"
         },
         "severity": {
-          "maximum": 10,
-          "minimum": 0,
-          "title": "Severity",
-          "type": "integer"
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
         },
         "source_text": {
           "anyOf": [
@@ -73,8 +120,7 @@
       },
       "required": [
         "code",
-        "label",
-        "severity"
+        "label"
       ],
       "title": "Symptom",
       "type": "object"
@@ -83,27 +129,24 @@
   "additionalProperties": false,
   "properties": {
     "channel": {
-      "enum": [
-        "telegram",
-        "whatsapp",
-        "app"
-      ],
-      "title": "Channel",
-      "type": "string"
-    },
-    "distress_score": {
       "anyOf": [
         {
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "type": "number"
+          "enum": [
+            "telegram",
+            "whatsapp",
+            "app"
+          ],
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Distress Score"
+      "title": "Channel"
+    },
+    "distress": {
+      "$ref": "#/$defs/Distress"
     },
     "evidence": {
       "items": {
@@ -113,9 +156,17 @@
       "type": "array"
     },
     "language": {
-      "pattern": "^[a-z]{2}$",
-      "title": "Language",
-      "type": "string"
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
     },
     "symptoms": {
       "items": {
@@ -124,12 +175,29 @@
       "minItems": 1,
       "title": "Symptoms",
       "type": "array"
+    },
+    "transcript": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transcript"
+    },
+    "underreporting": {
+      "default": false,
+      "title": "Underreporting",
+      "type": "boolean"
     }
   },
   "required": [
     "symptoms",
-    "language",
-    "channel"
+    "distress"
   ],
   "title": "SymptomReport",
   "type": "object"

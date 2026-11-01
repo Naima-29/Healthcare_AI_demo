@@ -1,33 +1,71 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
-      "study_uid": "1.2.840.113619.2.55.3",
       "label": "tumor",
-      "p_raw": 0.91,
-      "p_calibrated": 0.84,
-      "heatmap_ref": "s3://heatmaps/abc.png",
-      "quality": "ok",
-      "model_version": "ct-v1.0.0"
+      "p_raw": 0.9999,
+      "p_calibrated": 0.975,
+      "cam_metrics": {
+        "coverage": 0.0322,
+        "center_ratio": 0.0495,
+        "lr_asymmetry": 0.5446,
+        "tb_asymmetry": 1.0
+      },
+      "quality": {
+        "quality": "adequate",
+        "issues": [],
+        "ood_score": 0.08,
+        "in_distribution": true
+      },
+      "provenance": {
+        "study_uid": "1.2.826.0.1.3680043.8.498.10021",
+        "model": "kidney-ct-cls v1 (Loop v1 pipeline)",
+        "modality": "CT",
+        "acquired": "2026-10-11T18:20:00Z",
+        "live_model": false,
+        "source": "Synthetic/public de-identified demo image (no real patient)"
+      },
+      "heatmap_ref": "/assets/heatmap.jpg",
+      "key_image": "/assets/ct.png",
+      "note": "Attention concentrated on the right kidney lower pole. Signal only, not a diagnosis.",
+      "calibration": "temperature scaling T=2.5"
     }
   ],
   "invalid": [
     {
-      "study_uid": "1",
       "label": "tumor",
-      "p_raw": 1.2,
-      "p_calibrated": 0.8,
-      "heatmap_ref": "x",
-      "quality": "ok",
-      "model_version": "v"
+      "p_calibrated": 1.2,
+      "quality": {
+        "quality": "adequate",
+        "in_distribution": true
+      },
+      "provenance": {
+        "study_uid": "1",
+        "model": "m"
+      }
     },
     {
-      "study_uid": "1",
       "label": "cancer",
-      "p_raw": 0.2,
-      "p_calibrated": 0.2,
-      "heatmap_ref": "x",
-      "quality": "ok",
-      "model_version": "v"
+      "p_calibrated": 0.5,
+      "quality": {
+        "quality": "adequate",
+        "in_distribution": true
+      },
+      "provenance": {
+        "study_uid": "1",
+        "model": "m"
+      }
+    },
+    {
+      "label": "tumor",
+      "p_calibrated": 0.5,
+      "quality": {
+        "quality": "adequate",
+        "in_distribution": true
+      },
+      "provenance": {
+        "study_uid": "1"
+      }
     }
   ]
 }

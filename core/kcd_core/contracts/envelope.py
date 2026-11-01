@@ -32,7 +32,7 @@ class Envelope(BaseModel):
     causation_id: UUID | None = None
     idempotency_key: str
     created_at: datetime
-    manifest_version: str = Field(description="'<seat>@<semver>' of the sender's active manifest")
+    manifest_version: str = Field(description="'<seat>@v<version>' of the sender's active manifest")
     payload: dict[str, Any]
     sig: str | None = Field(default=None, description="Ed25519 signature (base64url) over the JCS form without sig")
 
@@ -44,8 +44,9 @@ class Envelope(BaseModel):
         return self.model_dump(mode="json", by_alias=True)
 
 
-def idempotency_key(sender: str, type_: MessageType, episode_id: str, payload: dict[str, Any]) -> str:
-    digest = hashlib.sha256(rfc8785.dumps({"f": sender, "t": str(type_), "e": episode_id, "p": payload}))
+def idempotency_key(sender: str, to: str, type_: MessageType, episode_id: str, payload: dict[str, Any]) -> str:
+    # `to` is part of the key: one finding fanned out to two seats is two messages, not a duplicate.
+    digest = hashlib.sha256(rfc8785.dumps({"f": sender, "to": to, "t": str(type_), "e": episode_id, "p": payload}))
     return f"sha256:{digest.hexdigest()}"
 
 
@@ -66,7 +67,7 @@ def new_envelope(
     model = payload if isinstance(payload, BaseModel) else PAYLOADS[type_].model_validate(payload)
     if not isinstance(model, PAYLOADS[type_]):
         raise TypeError(f"payload {type(model).__name__} does not match message type {type_}")
-    body = model.model_dump(mode="json")
+    body = model.model_dump(mode="json", by_alias=True)
     return Envelope(
         id=uuid.uuid4(),
         type=type_,
@@ -76,7 +77,7 @@ def new_envelope(
         episode_id=episode_id,
         correlation_id=correlation_id or uuid.uuid4(),
         causation_id=causation_id,
-        idempotency_key=idempotency_key(sender, type_, episode_id, body),
+        idempotency_key=idempotency_key(sender, to, type_, episode_id, body),
         created_at=now,
         manifest_version=manifest_version,
         payload=body,

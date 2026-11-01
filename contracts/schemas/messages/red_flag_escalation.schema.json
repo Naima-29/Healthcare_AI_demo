@@ -16,10 +16,6 @@
           "title": "Detected By",
           "type": "string"
         },
-        "evidence": {
-          "title": "Evidence",
-          "type": "string"
-        },
         "rule_id": {
           "anyOf": [
             {
@@ -35,8 +31,7 @@
       },
       "required": [
         "code",
-        "detected_by",
-        "evidence"
+        "detected_by"
       ],
       "title": "RedFlag",
       "type": "object"
@@ -44,37 +39,67 @@
   },
   "additionalProperties": false,
   "properties": {
+    "citations": {
+      "items": {
+        "description": "Knowledge Model citation, e.g. '[14] KDIGO 2024 ...'",
+        "minLength": 3,
+        "type": "string"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Evidence",
+      "type": "array"
+    },
     "flags": {
+      "description": "Which detector fired (rules, model or both)",
       "items": {
         "$ref": "#/$defs/RedFlag"
       },
-      "minItems": 1,
       "title": "Flags",
       "type": "array"
     },
+    "pattern": {
+      "description": "Red-flag pattern from the Knowledge Model",
+      "title": "Pattern",
+      "type": "string"
+    },
     "safety_script_sent": {
+      "default": false,
       "title": "Safety Script Sent",
       "type": "boolean"
     },
-    "severity": {
-      "enum": [
-        "critical",
-        "urgent"
-      ],
-      "title": "Severity",
-      "type": "string"
-    },
     "unit": {
-      "description": "Care unit whose on-call rota is paged, e.g. 'nephrology'",
-      "title": "Unit",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "On-call unit to page; the Dispatcher's default if absent",
+      "title": "Unit"
+    },
+    "urgency": {
+      "enum": [
+        "high",
+        "medium"
+      ],
+      "title": "Urgency",
       "type": "string"
     }
   },
   "required": [
-    "flags",
-    "severity",
-    "unit",
-    "safety_script_sent"
+    "urgency",
+    "pattern",
+    "evidence"
   ],
   "title": "RedFlagEscalation",
   "type": "object"

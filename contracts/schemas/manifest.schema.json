@@ -1,38 +1,84 @@
 {
   "$defs": {
-    "GateSpec": {
+    "Humanized": {
       "additionalProperties": false,
       "properties": {
-        "artifact": {
-          "description": "Artifact kind held for review, e.g. 'case_pack'",
-          "title": "Artifact",
-          "type": "string"
+        "audio": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio"
         },
-        "signer_role": {
-          "description": "Role that must sign, e.g. 'clinician:radiology'",
-          "title": "Signer Role",
-          "type": "string"
+        "fuzzy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fuzzy"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "video": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Video"
         }
       },
-      "required": [
-        "artifact",
-        "signer_role"
-      ],
-      "title": "GateSpec",
+      "title": "Humanized",
       "type": "object"
     },
     "MemoryScopes": {
       "additionalProperties": false,
       "properties": {
+        "partition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partition"
+        },
         "read": {
           "items": {
             "enum": [
-              "L0",
-              "L1",
-              "L2",
-              "L3"
+              0,
+              1,
+              2,
+              3
             ],
-            "type": "string"
+            "type": "integer"
           },
           "title": "Read",
           "type": "array"
@@ -40,12 +86,12 @@
         "write": {
           "items": {
             "enum": [
-              "L0",
-              "L1",
-              "L2",
-              "L3"
+              0,
+              1,
+              2,
+              3
             ],
-            "type": "string"
+            "type": "integer"
           },
           "title": "Write",
           "type": "array"
@@ -57,8 +103,8 @@
     "MessageType": {
       "enum": [
         "symptom_report",
-        "medication_report",
         "red_flag_escalation",
+        "medication_report",
         "data_request",
         "data_delivered",
         "imaging_signal",
@@ -73,32 +119,58 @@
     "ModelSpec": {
       "additionalProperties": false,
       "properties": {
-        "name": {
-          "title": "Name",
+        "edge": {
+          "description": "Edge model id, or 'none' for a deterministic seat",
+          "title": "Edge",
           "type": "string"
         },
-        "provider": {
-          "enum": [
-            "vllm",
-            "ollama",
-            "cloud_deidentified",
-            "none"
+        "fallback": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Provider",
-          "type": "string"
+          "default": null,
+          "description": "Cloud fallback; only ever sees de-identified data",
+          "title": "Fallback"
         }
       },
       "required": [
-        "provider",
-        "name"
+        "edge"
       ],
       "title": "ModelSpec",
+      "type": "object"
+    },
+    "Unit": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Billing unit, e.g. 'per_check'",
+          "title": "Kind",
+          "type": "string"
+        },
+        "tc": {
+          "description": "Token-credits per unit",
+          "minimum": 0,
+          "title": "Tc",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "tc"
+      ],
+      "title": "Unit",
       "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
     "a2a_peers": {
+      "description": "Seats this seat may address (via the Dispatcher)",
       "items": {
         "type": "string"
       },
@@ -117,12 +189,48 @@
       "default": null,
       "title": "Artifact"
     },
+    "compiled_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Compiled At"
+    },
+    "compiled_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Compiled By"
+    },
     "consumes": {
       "items": {
         "$ref": "#/$defs/MessageType"
       },
       "title": "Consumes",
       "type": "array"
+    },
+    "desk": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Desk"
     },
     "emits": {
       "items": {
@@ -132,21 +240,34 @@
       "type": "array"
     },
     "gates": {
+      "description": "Gate ids from the catalogue; ['none'] if automatic",
       "items": {
-        "$ref": "#/$defs/GateSpec"
+        "type": "string"
       },
+      "minItems": 1,
       "title": "Gates",
       "type": "array"
     },
+    "humanized": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Humanized"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "job_description": {
+      "minLength": 20,
       "title": "Job Description",
       "type": "string"
     },
     "location": {
       "enum": [
-        "edge",
-        "device",
-        "cloud"
+        "patient_edge",
+        "hospital_edge"
       ],
       "title": "Location",
       "type": "string"
@@ -157,12 +278,41 @@
     "model": {
       "$ref": "#/$defs/ModelSpec"
     },
+    "name": {
+      "minLength": 2,
+      "title": "Name",
+      "type": "string"
+    },
     "refuses": {
       "items": {
         "type": "string"
       },
       "title": "Refuses",
       "type": "array"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "safety_script": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Safety Script"
     },
     "seat": {
       "pattern": "^[a-z][a-z0-9_]{1,40}$",
@@ -191,20 +341,21 @@
       "type": "array"
     },
     "unit": {
-      "title": "Unit",
-      "type": "string"
+      "$ref": "#/$defs/Unit"
     },
     "version": {
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "minimum": 1,
       "title": "Version",
-      "type": "string"
+      "type": "integer"
     }
   },
   "required": [
     "seat",
+    "name",
     "version",
     "location",
     "model",
+    "gates",
     "unit",
     "job_description"
   ],

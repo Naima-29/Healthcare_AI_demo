@@ -1,25 +1,48 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
-      "artifact_id": "cp_001",
+      "case_id": "case-marco-r-1",
+      "sbar": {
+        "S": [
+          "Red-flag pattern reported at home via the Companion."
+        ],
+        "B": [
+          "Marco R., 61, male. RCC post-nephrectomy."
+        ],
+        "A": [
+          "Drug–disease conflict (high): NSAID (ibuprofen)."
+        ],
+        "R": [
+          "Stop NSAID; alternative analgesia per clinician; recheck BP."
+        ]
+      },
       "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "gate_role": "clinician:nephrology",
-      "summary": "NSAID use in CKD 3b"
+      "version": 1,
+      "gates": [
+        "clinician_signoff"
+      ]
     }
   ],
   "invalid": [
     {
-      "artifact_id": "a",
-      "artifact_hash": "md5:abc",
-      "gate_role": "r",
-      "summary": "s"
+      "case_id": "c",
+      "sbar": {
+        "S": [],
+        "B": [],
+        "A": [],
+        "R": []
+      },
+      "artifact_hash": "md5:abc"
     },
     {
-      "artifact_id": "a",
-      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "gate_role": "r",
-      "summary": "s",
-      "diagnosis": "free text"
+      "case_id": "c",
+      "sbar": {
+        "S": [],
+        "B": [],
+        "A": []
+      },
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   ]
 }

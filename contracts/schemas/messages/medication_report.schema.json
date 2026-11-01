@@ -1,112 +1,76 @@
 {
-  "$defs": {
-    "EvidenceRef": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "enum": [
-            "message",
-            "observation",
-            "study",
-            "document",
-            "variant",
-            "series"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "ref": {
-          "title": "Ref",
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "ref"
-      ],
-      "title": "EvidenceRef",
-      "type": "object"
-    },
-    "Medication": {
-      "additionalProperties": false,
-      "properties": {
-        "dose": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dose"
-        },
-        "frequency": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Frequency"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "rxnorm": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Rxnorm"
-        },
-        "source": {
-          "enum": [
-            "patient_reported",
-            "fhir"
-          ],
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "source"
-      ],
-      "title": "Medication",
-      "type": "object"
-    }
-  },
   "additionalProperties": false,
   "properties": {
-    "evidence": {
-      "items": {
-        "$ref": "#/$defs/EvidenceRef"
-      },
-      "title": "Evidence",
-      "type": "array"
+    "class": {
+      "description": "Drug class used by the conflict rules, e.g. 'NSAID'",
+      "title": "Class",
+      "type": "string"
     },
-    "medications": {
-      "items": {
-        "$ref": "#/$defs/Medication"
-      },
-      "minItems": 1,
-      "title": "Medications",
-      "type": "array"
+    "dose_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dose Text"
+    },
+    "drug": {
+      "title": "Drug",
+      "type": "string"
+    },
+    "frequency": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frequency"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "rxnorm": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rxnorm"
+    },
+    "source": {
+      "default": "patient_reported",
+      "enum": [
+        "patient_reported",
+        "fhir"
+      ],
+      "title": "Source",
+      "type": "string"
     }
   },
   "required": [
-    "medications"
+    "drug",
+    "class"
   ],
   "title": "MedicationReport",
   "type": "object"

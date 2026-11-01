@@ -2,7 +2,7 @@ import pytest
 from kcd_core.contracts import MessageType
 from kcd_core.signing import KeyRing, SignatureError, Signer, sign_envelope, verify_envelope
 
-PAYLOAD = {"items": [{"kind": "lab", "code": "egfr", "max_age_days": 30}], "reason": "stale eGFR"}
+PAYLOAD = {"what": "recent creatinine / eGFR", "why": "latest eGFR is 122 days old", "ask_patient": "lab report photo"}
 
 
 async def test_round_trip(desk):

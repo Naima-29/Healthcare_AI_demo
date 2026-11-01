@@ -60,6 +60,10 @@ class SeatContext:
         )
         return result
 
+    def act(self, action: str) -> None:
+        """Declare an action that is not a tool call (e.g. 'case.decide'); raises if a refusal blocks it."""
+        self.pep.check_action(action, patient_id=self.inbound.patient_id if self.inbound else None)
+
     def check_memory(self, layer: MemoryLayer, mode: str) -> None:
         self.pep.check_memory(layer, mode)
 

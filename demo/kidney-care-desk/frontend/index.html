@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kidney Care Desk · Loop AI Labs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img src="/assets/loopnexus.png" alt="Loop Nexus" class="logo" />
+      <div>
+        <div class="product">Kidney Care Desk <span class="ver">v2</span></div>
+        <div class="sub">Seats, not scripts · synthetic demo, not a medical device</div>
+      </div>
+    </div>
+    <div class="golden" id="golden"></div>
+    <div class="status" id="status"></div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <span class="group">The three doors</span>
+    <button data-view="stage" class="active">Stage</button>
+    <button data-view="director">Director · Chief of Staff</button>
+    <button data-view="patient">Patient · Companion</button>
+    <button data-view="board">Clinicians · Clinical Board</button>
+    <span class="group">Behind the doors</span>
+    <button data-view="roster">Roster</button>
+    <button data-view="agent">Agent page</button>
+    <button data-view="stream">A2A stream</button>
+    <button data-view="memory">Memory</button>
+  </nav>
+
+  <main id="main">
+    <!-- STAGE: the three doors side by side -->
+    <section class="view active" id="view-stage">
+      <div class="stage">
+        <div class="col phone-col"><div class="door-label patient">Patient → Companion only</div><div data-mount="phone"></div></div>
+        <div class="col mid-col">
+          <div class="door-label director">Hospital Director → Chief of Staff only</div>
+          <div data-mount="director" class="director-mini"></div>
+          <div class="door-label internal">Behind the doors · typed, signed A2A</div>
+          <div data-mount="stream" class="stream-mini"></div>
+        </div>
+        <div class="col board-col"><div class="door-label clinician">Clinicians → Clinical Board only</div><div data-mount="board"></div></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-director"><div class="single"><div class="door-label director">Hospital Director → Chief of Staff only</div><div data-mount="director" class="director-full"></div></div></section>
+    <section class="view" id="view-patient"><div class="single center"><div class="door-label patient">Patient → Companion only</div><div data-mount="phone"></div></div></section>
+    <section class="view" id="view-board"><div class="single"><div class="door-label clinician">Clinicians → Clinical Board only</div><div data-mount="board" class="board-full"></div></div></section>
+    <section class="view" id="view-roster"><div class="single" id="roster"></div></section>
+    <section class="view" id="view-agent"><div class="single" id="agent"></div></section>
+    <section class="view" id="view-stream"><div class="single"><div data-mount="stream" class="stream-full"></div></div></section>
+    <section class="view" id="view-memory"><div class="single" id="memory"></div></section>
+  </main>
+
+  <div id="toast"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

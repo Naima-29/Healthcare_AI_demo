@@ -1,57 +1,73 @@
 {
   "seat": "renal_guardian",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Renal Guardian",
+  "role": "eGFR trajectory and drug-disease conflicts",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "nephrology",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "loopq-clin-4b",
+    "fallback": null
   },
   "skills": [
-    "kdigo_staging",
-    "drug_disease_rules"
+    "egfr_trajectory",
+    "ckd_stage",
+    "drug_disease_conflicts",
+    "stale_data_check"
   ],
   "tools": [
-    "fhir.read_observations",
-    "fhir.read_medications",
-    "lab.read_results",
-    "km.lookup"
+    "fhir.get_observations",
+    "fhir.get_conditions",
+    "fhir.get_medications",
+    "wearables.read",
+    "km.check_conflicts",
+    "km.ckd_stage",
+    "a2a.send"
   ],
-  "surfaces": [],
+  "surfaces": [
+    "fhir",
+    "wearables",
+    "km"
+  ],
   "memory": {
     "read": [
-      "L0",
-      "L1",
-      "L2",
-      "L3"
+      0,
+      1,
+      2,
+      3
     ],
     "write": [
-      "L0"
+      3
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "change_dose",
+    "prescribe",
+    "send_to_patient",
+    "alter_record"
   ],
-  "gates": [],
+  "gates": [
+    "nephrologist_review"
+  ],
   "a2a_peers": [
-    "safety_verifier",
-    "companion"
+    "companion",
+    "safety_verifier"
+  ],
+  "artifact": "therapy_conflict",
+  "unit": {
+    "kind": "per_check",
+    "tc": 5
+  },
+  "job_description": "Watch the kidney. Follow the eGFR trajectory and the CKD stage, check every reported medication against the patient's conditions and blood pressure, and flag drug-disease conflicts with their citations. If the latest kidney function result is older than 90 days, request fresh data before concluding. Never change, stop or prescribe a dose, never write to the record, never send anything to the patient; a nephrologist reviews every conflict.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
+  "emits": [
+    "data_request",
+    "therapy_conflict"
   ],
   "consumes": [
-    "symptom_report",
-    "medication_report",
+    "acknowledgment",
     "data_delivered",
-    "acknowledgment"
-  ],
-  "emits": [
-    "therapy_conflict",
-    "data_request",
-    "acknowledgment"
-  ],
-  "artifact": null,
-  "unit": "nephrology",
-  "job_description": "Track eGFR trend and CKD stage, ask for fresh labs when data is stale, and flag drug-disease conflicts with citations."
+    "medication_report"
+  ]
 }

@@ -1,26 +1,5 @@
 {
   "$defs": {
-    "Citation": {
-      "additionalProperties": false,
-      "properties": {
-        "ref": {
-          "description": "Section, rule id or URL",
-          "title": "Ref",
-          "type": "string"
-        },
-        "source": {
-          "description": "Guideline or rule source, e.g. 'KDIGO 2024'",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "source",
-        "ref"
-      ],
-      "title": "Citation",
-      "type": "object"
-    },
     "EvidenceRef": {
       "additionalProperties": false,
       "properties": {
@@ -31,7 +10,8 @@
             "study",
             "document",
             "variant",
-            "series"
+            "series",
+            "evidence"
           ],
           "title": "Kind",
           "type": "string"
@@ -53,10 +33,17 @@
   "properties": {
     "citations": {
       "items": {
-        "$ref": "#/$defs/Citation"
+        "description": "Knowledge Model citation, e.g. '[14] KDIGO 2024 ...'",
+        "minLength": 3,
+        "type": "string"
       },
       "title": "Citations",
       "type": "array"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
     },
     "evidence": {
       "items": {
@@ -65,10 +52,9 @@
       "title": "Evidence",
       "type": "array"
     },
-    "in_reply_to": {
+    "evidence_id": {
       "anyOf": [
         {
-          "format": "uuid",
           "type": "string"
         },
         {
@@ -76,32 +62,18 @@
         }
       ],
       "default": null,
-      "title": "In Reply To"
-    },
-    "items": {
-      "items": {
-        "additionalProperties": true,
-        "type": "object"
-      },
-      "minItems": 1,
-      "title": "Items",
-      "type": "array"
+      "title": "Evidence Id"
     },
     "kind": {
-      "enum": [
-        "lab",
-        "vitals",
-        "wearable_series",
-        "genomic_context",
-        "document"
-      ],
+      "description": "lab, genomic_context, wearable_series, ...",
+      "pattern": "^[a-z][a-z_]{1,40}$",
       "title": "Kind",
       "type": "string"
     }
   },
   "required": [
     "kind",
-    "items"
+    "data"
   ],
   "title": "DataDelivered",
   "type": "object"

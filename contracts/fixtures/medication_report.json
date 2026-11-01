@@ -1,27 +1,21 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
-      "medications": [
-        {
-          "name": "ibuprofen",
-          "dose": "400 mg",
-          "frequency": "3x/day",
-          "source": "patient_reported"
-        }
-      ]
+      "drug": "ibuprofen",
+      "class": "NSAID",
+      "dose_text": "I take ibuprofen 600 for the pain, three times a day",
+      "reason": "self-reported for pain"
     }
   ],
   "invalid": [
     {
-      "medications": []
+      "drug": "ibuprofen"
     },
     {
-      "medications": [
-        {
-          "name": "x",
-          "source": "guess"
-        }
-      ]
+      "drug": "x",
+      "class": "NSAID",
+      "source": "guess"
     }
   ]
 }

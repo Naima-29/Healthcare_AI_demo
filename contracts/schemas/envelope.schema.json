@@ -3,8 +3,8 @@
     "MessageType": {
       "enum": [
         "symptom_report",
-        "medication_report",
         "red_flag_escalation",
+        "medication_report",
         "data_request",
         "data_delivered",
         "imaging_signal",
@@ -61,7 +61,7 @@
       "type": "string"
     },
     "manifest_version": {
-      "description": "'<seat>@<semver>' of the sender's active manifest",
+      "description": "'<seat>@v<version>' of the sender's active manifest",
       "title": "Manifest Version",
       "type": "string"
     },

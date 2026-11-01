@@ -23,7 +23,7 @@ def targets(pager):
 async def test_climbs_the_ladder_until_exhausted(desk):
     svc, clock, pager = service()
     env = desk.envelope(MessageType.RED_FLAG_ESCALATION, "companion", "case_briefer", RED_FLAG)
-    esc = await svc.open(env, unit="nephrology")
+    esc = await svc.open(env, unit="uro_oncology")
     assert targets(pager) == ["dr_rossi"]
 
     clock.advance(timedelta(minutes=4))
@@ -44,7 +44,7 @@ async def test_climbs_the_ladder_until_exhausted(desk):
 async def test_ack_stops_the_ladder(desk):
     svc, clock, pager = service()
     env = desk.envelope(MessageType.RED_FLAG_ESCALATION, "companion", "case_briefer", RED_FLAG)
-    esc = await svc.open(env, unit="nephrology")
+    esc = await svc.open(env, unit="uro_oncology")
     await svc.acknowledge(esc.id, "dr_rossi")
     clock.advance(timedelta(hours=1))
     await svc.tick()
@@ -53,9 +53,9 @@ async def test_ack_stops_the_ladder(desk):
 
 
 async def test_empty_rota_slot_escalates_immediately(desk):
-    svc, _, pager = service(FakeRota({("nephrology", "backup"): "dr_bianchi"}))
+    svc, _, pager = service(FakeRota({("uro_oncology", "backup"): "dr_bianchi"}))
     env = desk.envelope(MessageType.RED_FLAG_ESCALATION, "companion", "case_briefer", RED_FLAG)
-    await svc.open(env, unit="nephrology")
+    await svc.open(env, unit="uro_oncology")
     assert targets(pager) == []
     await svc.tick()  # no primary on call: deadline is now, so the next tick goes straight to backup
     assert targets(pager) == ["dr_bianchi"]
@@ -64,6 +64,6 @@ async def test_empty_rota_slot_escalates_immediately(desk):
 async def test_redelivered_red_flag_pages_once(desk):
     svc, _, pager = service()
     env = desk.envelope(MessageType.RED_FLAG_ESCALATION, "companion", "case_briefer", RED_FLAG)
-    first = await svc.open(env, unit="nephrology")
-    assert (await svc.open(env, unit="nephrology")).id == first.id
+    first = await svc.open(env, unit="uro_oncology")
+    assert (await svc.open(env, unit="uro_oncology")).id == first.id
     assert targets(pager) == ["dr_rossi"]

@@ -1,32 +1,41 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
+      "kind": "lab",
+      "data": {
+        "egfr": 52,
+        "creatinine": 1.41,
+        "date": "2026-10-08",
+        "source": "patient photo (on-device OCR)"
+      }
+    },
+    {
       "kind": "genomic_context",
-      "items": [
-        {
-          "gene": "VHL",
-          "variant": "c.499C>T",
-          "class": "pathogenic"
-        }
-      ],
+      "data": {
+        "panel": "NGS hereditary kidney cancer panel",
+        "findings": [
+          {
+            "gene": "VHL",
+            "hgvs": "c.499C>T",
+            "lab_classification": "pathogenic",
+            "relevance": "high"
+          }
+        ],
+        "disclosure": "Disclosure to the patient requires a geneticist (gate)."
+      },
       "citations": [
-        {
-          "source": "ACMG",
-          "ref": "PVS1"
-        }
+        "[16] Richards S et al. ACMG/AMP variant interpretation, Genet Med 2015;17:405-424"
       ]
     }
   ],
   "invalid": [
     {
-      "kind": "genomic_context",
-      "items": []
+      "kind": "lab"
     },
     {
-      "kind": "gossip",
-      "items": [
-        {}
-      ]
+      "kind": "Lab Report!",
+      "data": {}
     }
   ]
 }

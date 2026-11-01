@@ -26,18 +26,18 @@ class RoutingError(Exception):
 
 def check_against_catalog(m: Manifest, catalog: PolicyCatalog) -> None:
     problems: list[str] = []
-    if unknown := set(m.tools) - catalog.tools.keys():
+    if unknown := set(m.tools) - catalog.all_tools():
         problems.append(f"unknown tools {sorted(unknown)}")
     if unknown := set(m.refuses) - catalog.refusals.keys():
         problems.append(f"unknown refusals {sorted(unknown)}")
-    if unknown := set(m.surfaces) - set(catalog.surfaces):
+    if unknown := set(m.surfaces) - catalog.surfaces.keys():
         problems.append(f"unknown surfaces {sorted(unknown)}")
-    if unknown := {g.signer_role for g in m.gates} - set(catalog.gate_roles):
-        problems.append(f"unknown gate roles {sorted(unknown)}")
+    if unknown := set(m.gates) - catalog.gates.keys():
+        problems.append(f"unknown gates {sorted(unknown)}")
     for tool in m.tools:
-        surface = catalog.tools[tool].surface if tool in catalog.tools else None
+        surface = catalog.surface_of(tool)
         if surface and surface not in m.surfaces:
-            problems.append(f"tool '{tool}' writes to surface '{surface}' the seat does not have")
+            problems.append(f"tool '{tool}' needs surface '{surface}'")
     if problems:
         raise ManifestError(f"{m.ref}: " + "; ".join(problems))
 

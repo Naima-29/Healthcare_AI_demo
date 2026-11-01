@@ -1,30 +1,30 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
-      "items": [
-        {
-          "kind": "lab",
-          "code": "egfr",
-          "max_age_days": 30
-        }
-      ],
-      "reason": "last eGFR is 94 days old"
+      "what": "recent creatinine / eGFR",
+      "why": "latest eGFR on record is 122 days old (2026-06-12)",
+      "ask_patient": "photo of the most recent blood test report"
+    },
+    {
+      "what": "genomic_context",
+      "why": "case opened for a patient with a panel on file"
     }
   ],
   "invalid": [
     {
-      "items": [],
-      "reason": "x"
+      "what": "egfr"
     },
     {
+      "what": "egfr",
+      "why": "stale",
       "items": [
         {
           "kind": "lab",
           "code": "egfr",
           "max_age_days": -1
         }
-      ],
-      "reason": "x"
+      ]
     }
   ]
 }

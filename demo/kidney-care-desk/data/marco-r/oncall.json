@@ -1,0 +1,11 @@
+{
+  "rota_date": "2026-10-12",
+  "roles": {
+    "uro_oncologist": [{ "name": "Dr. L. Bianchi", "pager": "4411" }, { "name": "Dr. S. Marino", "pager": "4417" }],
+    "nephrologist":   [{ "name": "Dr. A. Rossi", "pager": "5120" }],
+    "radiologist":    [{ "name": "Dr. E. Conti", "pager": "6203" }],
+    "geneticist":     [{ "name": "Dr. P. Greco", "pager": "7301" }],
+    "emergency":      [{ "name": "ED triage desk", "pager": "112" }]
+  },
+  "note": "Fictional names for the demo."
+}

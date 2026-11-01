@@ -1,26 +1,5 @@
 {
   "$defs": {
-    "Citation": {
-      "additionalProperties": false,
-      "properties": {
-        "ref": {
-          "description": "Section, rule id or URL",
-          "title": "Ref",
-          "type": "string"
-        },
-        "source": {
-          "description": "Guideline or rule source, e.g. 'KDIGO 2024'",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "source",
-        "ref"
-      ],
-      "title": "Citation",
-      "type": "object"
-    },
     "EvidenceRef": {
       "additionalProperties": false,
       "properties": {
@@ -31,7 +10,8 @@
             "study",
             "document",
             "variant",
-            "series"
+            "series",
+            "evidence"
           ],
           "title": "Kind",
           "type": "string"
@@ -53,19 +33,38 @@
   "properties": {
     "citations": {
       "items": {
-        "$ref": "#/$defs/Citation"
+        "description": "Knowledge Model citation, e.g. '[14] KDIGO 2024 ...'",
+        "minLength": 3,
+        "type": "string"
       },
       "minItems": 1,
       "title": "Citations",
       "type": "array"
     },
-    "condition": {
-      "title": "Condition",
-      "type": "string"
+    "conditions": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Conditions",
+      "type": "array"
+    },
+    "data_freshness": {
+      "additionalProperties": true,
+      "title": "Data Freshness",
+      "type": "object"
     },
     "drug": {
       "title": "Drug",
       "type": "string"
+    },
+    "egfr_series": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Egfr Series",
+      "type": "array"
     },
     "evidence": {
       "items": {
@@ -74,10 +73,6 @@
       "title": "Evidence",
       "type": "array"
     },
-    "explanation": {
-      "title": "Explanation",
-      "type": "string"
-    },
     "options": {
       "items": {
         "type": "string"
@@ -85,15 +80,27 @@
       "title": "Options",
       "type": "array"
     },
-    "rule_id": {
-      "title": "Rule Id",
+    "rationale": {
+      "title": "Rationale",
       "type": "string"
+    },
+    "rule_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rule Id"
     },
     "severity": {
       "enum": [
-        "contraindicated",
-        "caution",
-        "monitor"
+        "high",
+        "moderate",
+        "low"
       ],
       "title": "Severity",
       "type": "string"
@@ -101,10 +108,9 @@
   },
   "required": [
     "drug",
-    "condition",
-    "rule_id",
+    "conditions",
     "severity",
-    "explanation",
+    "rationale",
     "citations"
   ],
   "title": "TherapyConflict",

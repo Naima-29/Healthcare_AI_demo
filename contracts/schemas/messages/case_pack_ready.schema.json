@@ -1,30 +1,92 @@
 {
+  "$defs": {
+    "Sbar": {
+      "additionalProperties": false,
+      "properties": {
+        "A": {
+          "items": {
+            "type": "string"
+          },
+          "title": "A",
+          "type": "array"
+        },
+        "B": {
+          "items": {
+            "type": "string"
+          },
+          "title": "B",
+          "type": "array"
+        },
+        "R": {
+          "items": {
+            "type": "string"
+          },
+          "title": "R",
+          "type": "array"
+        },
+        "S": {
+          "items": {
+            "type": "string"
+          },
+          "title": "S",
+          "type": "array"
+        },
+        "narrative": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Narrative"
+        }
+      },
+      "required": [
+        "S",
+        "B",
+        "A",
+        "R"
+      ],
+      "title": "Sbar",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "artifact_hash": {
+      "description": "Hash of the case pack version; the clinician's release binds to it",
       "pattern": "^sha256:[0-9a-f]{64}$",
       "title": "Artifact Hash",
       "type": "string"
     },
-    "artifact_id": {
-      "title": "Artifact Id",
+    "case_id": {
+      "title": "Case Id",
       "type": "string"
     },
-    "gate_role": {
-      "description": "Signer role the gate is opened for, e.g. 'clinician:nephrology'",
-      "title": "Gate Role",
-      "type": "string"
+    "gates": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Gates",
+      "type": "array"
     },
-    "summary": {
-      "title": "Summary",
-      "type": "string"
+    "sbar": {
+      "$ref": "#/$defs/Sbar"
+    },
+    "version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
     }
   },
   "required": [
-    "artifact_id",
-    "artifact_hash",
-    "gate_role",
-    "summary"
+    "case_id",
+    "sbar",
+    "artifact_hash"
   ],
   "title": "CasePackReady",
   "type": "object"

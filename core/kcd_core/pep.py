@@ -45,19 +45,23 @@ class PolicyEnforcementPoint:
 
     # --- helpers -------------------------------------------------------------
 
-    def _refused_tools(self) -> dict[str, str]:
+    def _refused_actions(self) -> dict[str, str]:
         out: dict[str, str] = {}
         for rid in self.manifest.refuses:
-            for tool in self.catalog.refusals[rid].blocked_tools:
-                out[tool] = rid
+            for action in self.catalog.refusals[rid].actions:
+                out.setdefault(action, rid)
         return out
 
     def _gated_content(self) -> dict[str, str]:
         out: dict[str, str] = {}
         for rid in self.manifest.refuses:
-            for cls in self.catalog.refusals[rid].release_gated_content:
-                out[cls] = rid
+            for cls in self.catalog.refusals[rid].content:
+                out.setdefault(cls, rid)
         return out
+
+    def _tool_refusal(self, tool: str) -> str | None:
+        refused = self._refused_actions()
+        return next((refused[a] for a in self.catalog.tool_actions.get(tool, []) if a in refused), None)
 
     def _decide(self, kind: str, target: str, reason: str | None, refusal: str | None = None,
                 patient_id: str | None = None) -> None:
@@ -77,21 +81,25 @@ class PolicyEnforcementPoint:
     # --- checks --------------------------------------------------------------
 
     def visible_tools(self) -> list[str]:
-        refused = self._refused_tools()
-        return [t for t in self.manifest.tools if t in self.catalog.tools and t not in refused]
+        known = self.catalog.all_tools()
+        return [t for t in self.manifest.tools if t in known and self._tool_refusal(t) is None]
 
     def check_tool(self, tool: str, patient_id: str | None = None) -> None:
-        refused = self._refused_tools()
-        if tool in refused:  # a refusal wins even if the tool is also listed: safety floor by union
-            return self._decide("tool", tool, "refused by policy", refused[tool], patient_id)
+        if refusal := self._tool_refusal(tool):  # a refusal wins even if the tool is listed: safety floor by union
+            return self._decide("tool", tool, "refused by policy", refusal, patient_id)
         if tool not in self.manifest.tools:
             return self._decide("tool", tool, "not in manifest", None, patient_id)
-        if tool not in self.catalog.tools:
+        if tool not in self.catalog.all_tools():
             return self._decide("tool", tool, "not in catalogue", None, patient_id)
-        surface = self.catalog.tools[tool].surface
+        surface = self.catalog.surface_of(tool)
         if surface and surface not in self.manifest.surfaces:
             return self._decide("tool", tool, f"surface '{surface}' not granted", None, patient_id)
         self._decide("tool", tool, None, None, patient_id)
+
+    def check_action(self, action: str, patient_id: str | None = None) -> None:
+        """For actions that are not a tool call (e.g. case.decide, verifier.override)."""
+        refusal = self._refused_actions().get(action)
+        self._decide("action", action, "refused by policy" if refusal else None, refusal, patient_id)
 
     def check_emit(self, type_: MessageType, to: str) -> None:
         if type_ not in self.manifest.emits:
@@ -102,8 +110,8 @@ class PolicyEnforcementPoint:
 
     def check_memory(self, layer: MemoryLayer, mode: str) -> None:
         allowed = self.manifest.memory.read if mode == "read" else self.manifest.memory.write
-        reason = None if layer in allowed else f"memory.{mode} does not include {layer}"
-        self._decide("memory", f"{mode}:{layer}", reason)
+        reason = None if layer in allowed else f"memory.{mode} does not include L{layer}"
+        self._decide("memory", f"{mode}:L{layer}", reason)
 
     def check_content(self, content_class: str, artifact_hash: str | None = None,
                       release: Release | None = None, patient_id: str | None = None) -> None:

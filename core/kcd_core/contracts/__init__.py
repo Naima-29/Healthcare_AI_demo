@@ -1,6 +1,6 @@
-from .catalog import PolicyCatalog, Refusal, ToolSpec
+from .catalog import Gate, PolicyCatalog, Refusal
 from .envelope import SCHEMA_VERSION, Envelope, new_envelope
-from .manifest import GateSpec, Manifest, MemoryLayer, MemoryScopes, ModelSpec
+from .manifest import Humanized, Manifest, MemoryLayer, MemoryScopes, ModelSpec, Unit
 from .messages import PAYLOADS, MessageType
 from .release import Release
 
@@ -8,7 +8,8 @@ __all__ = [
     "PAYLOADS",
     "SCHEMA_VERSION",
     "Envelope",
-    "GateSpec",
+    "Gate",
+    "Humanized",
     "Manifest",
     "MemoryLayer",
     "MemoryScopes",
@@ -17,6 +18,6 @@ __all__ = [
     "PolicyCatalog",
     "Refusal",
     "Release",
-    "ToolSpec",
+    "Unit",
     "new_envelope",
 ]

@@ -1,30 +1,39 @@
 {
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
   "valid": [
     {
-      "artifact_id": "cp_001",
+      "case_id": "case-marco-r-1",
+      "decision_id": "dec-1",
       "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "release_id": "rel_001",
-      "decision": "edited",
-      "clinician_role": "clinician:nephrology",
-      "patient_explanation_points": [
-        "stop ibuprofen",
-        "use paracetamol"
+      "signed_by": "Dr. Rossi",
+      "role": "treating_clinician",
+      "note": "",
+      "items": [
+        {
+          "code": "stop_nsaid",
+          "patient_text": "Please stop taking ibuprofen. Your doctor will suggest another painkiller."
+        }
       ]
     }
   ],
   "invalid": [
     {
-      "artifact_id": "a",
+      "case_id": "c",
+      "decision_id": "d",
       "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "release_id": "r",
-      "decision": "maybe",
-      "clinician_role": "c"
+      "signed_by": "Dr",
+      "items": []
     },
     {
-      "artifact_id": "a",
+      "case_id": "c",
       "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "decision": "approved",
-      "clinician_role": "c"
+      "signed_by": "Dr",
+      "items": [
+        {
+          "code": "x",
+          "patient_text": "y"
+        }
+      ]
     }
   ]
 }

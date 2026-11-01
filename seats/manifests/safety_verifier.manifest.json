@@ -1,53 +1,70 @@
 {
   "seat": "safety_verifier",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Safety Verifier",
+  "role": "Formal checks before anything leaves",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "quality",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "rules + loopq-clin-4b",
+    "fallback": null
   },
-  "skills": [],
-  "tools": [
-    "km.lookup",
-    "deid.anonymise",
-    "cloud_llm.complete_deidentified"
+  "skills": [
+    "citation_check",
+    "plausibility",
+    "deidentify",
+    "content_classes"
   ],
-  "surfaces": [],
+  "tools": [
+    "km.query",
+    "a2a.send"
+  ],
+  "surfaces": [
+    "km"
+  ],
   "memory": {
     "read": [
-      "L0",
-      "L3"
+      0,
+      1,
+      2,
+      3
     ],
     "write": [
-      "L0"
+      3
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "pass_failed_check",
+    "alter_record",
+    "transmit_identifiable_external"
   ],
-  "gates": [],
+  "gates": [
+    "none"
+  ],
   "a2a_peers": [
     "case_briefer",
-    "renal_guardian",
+    "genomics_interpreter",
     "imaging_reader",
-    "genomics_interpreter"
+    "renal_guardian"
+  ],
+  "artifact": "verification_report",
+  "unit": {
+    "kind": "per_100_checks",
+    "tc": 10
+  },
+  "job_description": "Run the formal checks before anything leaves a seat: every clinical claim must be cited to the Knowledge Model, values must be plausible, data sent to any external model must be de-identified, and messages to the patient must not contain diagnoses, dose instructions or unreviewed imaging results. Never pass a failed check, never alter a record, never send identifiable data outside the hospital.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
+  "emits": [
+    "acknowledgment",
+    "data_delivered",
+    "imaging_signal",
+    "therapy_conflict"
   ],
   "consumes": [
-    "therapy_conflict",
-    "imaging_signal",
-    "data_delivered"
-  ],
-  "emits": [
-    "therapy_conflict",
-    "imaging_signal",
+    "acknowledgment",
     "data_delivered",
-    "acknowledgment"
-  ],
-  "artifact": null,
-  "unit": "quality",
-  "job_description": "Check every clinical output before it moves on: citations present, values plausible, schema valid, and data de-identified before any cloud call."
+    "imaging_signal",
+    "therapy_conflict"
+  ]
 }

@@ -1,52 +1,62 @@
 {
   "seat": "genomics_interpreter",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Genomics Interpreter",
+  "role": "DNA panel against the Knowledge Model",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "genetics",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "loopq-clin-4b",
+    "fallback": null
   },
-  "skills": [],
-  "tools": [
-    "genomics.read_panel",
-    "km.lookup"
+  "skills": [
+    "read_panel",
+    "acmg_context",
+    "clinical_relevance"
   ],
-  "surfaces": [],
+  "tools": [
+    "genomics.get_panel",
+    "km.interpret_variant",
+    "a2a.send"
+  ],
+  "surfaces": [
+    "genomics",
+    "km"
+  ],
   "memory": {
     "read": [
-      "L0",
-      "L1",
-      "L3"
+      0,
+      1,
+      3
     ],
     "write": [
-      "L0"
+      3
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact",
-    "no_variant_reclassification"
+    "reclassify_variants",
+    "disclose_genetics_to_patient",
+    "send_to_patient"
   ],
   "gates": [
-    {
-      "artifact": "genomic_context",
-      "signer_role": "clinician:genetics"
-    }
+    "genetic_disclosure"
   ],
   "a2a_peers": [
     "safety_verifier"
   ],
-  "consumes": [
-    "data_request",
-    "acknowledgment"
-  ],
+  "artifact": "genomic_context",
+  "unit": {
+    "kind": "per_panel",
+    "tc": 15
+  },
+  "job_description": "Read the patient's genetic panel against the Knowledge Model and explain, for the clinical team, what each reported variant means for this case: hereditary risk, surveillance and kidney-sparing considerations. Use the laboratory's classification; never reclassify a variant. Never disclose genetic findings to the patient and never send anything to the patient; disclosure requires a geneticist.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
   "emits": [
     "data_delivered"
   ],
-  "artifact": null,
-  "unit": "genetics",
-  "job_description": "Read the patient's DNA panel against the Knowledge Model's variant classes (ACMG) and send hereditary context to the case pack."
+  "consumes": [
+    "acknowledgment",
+    "data_request"
+  ]
 }

@@ -1,46 +1,67 @@
 {
   "seat": "dispatcher",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Dispatcher",
+  "role": "A2A endpoint - routing and escalation",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "sportello",
   "model": {
-    "provider": "none",
-    "name": "none"
+    "edge": "loopq-clin-4b",
+    "fallback": null
   },
-  "skills": [],
+  "skills": [
+    "validate_sign_ack",
+    "route",
+    "escalation_ladder"
+  ],
   "tools": [
     "oncall.who_is_on_call",
-    "oncall.page"
+    "oncall.page",
+    "board.create_item",
+    "board.update_item",
+    "a2a.endpoint",
+    "a2a.send"
   ],
-  "surfaces": [],
+  "surfaces": [
+    "oncall"
+  ],
   "memory": {
     "read": [
-      "L0"
+      2,
+      3
     ],
     "write": [
-      "L0"
+      2
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "answer_patient_directly",
+    "rank_clinicians"
   ],
-  "gates": [],
+  "gates": [
+    "urgent_ack"
+  ],
   "a2a_peers": [
-    "companion",
+    "archivist",
     "case_briefer",
-    "archivist"
+    "companion",
+    "genomics_interpreter",
+    "imaging_reader",
+    "renal_guardian",
+    "safety_verifier"
   ],
-  "consumes": [
-    "case_pack_ready",
-    "acknowledgment"
-  ],
+  "artifact": "acknowledgment + board item",
+  "unit": {
+    "kind": "unmetered",
+    "tc": 0
+  },
+  "job_description": "Make sure every inbound item, human or machine, reaches the right owner once. Validate, verify the signature, acknowledge and route every typed message between the Companion and the hospital seats. Route by declared competence, responsibility for the patient and on-call availability; run the escalation ladder and page the on-call clinician for red flags, with an acknowledgement timer. Never answer the patient yourself. Never rank clinicians by measured speed or behaviour; every routing can be overridden by a human.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
   "emits": [
     "acknowledgment"
   ],
-  "artifact": null,
-  "unit": "operations",
-  "job_description": "Verify, route and acknowledge every message between seats. Page the on-call clinician on red flags and escalate until someone answers. Open review gates for case packs."
+  "consumes": [
+    "case_pack_ready"
+  ]
 }

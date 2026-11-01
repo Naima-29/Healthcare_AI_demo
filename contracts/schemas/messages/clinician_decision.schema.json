@@ -1,4 +1,50 @@
 {
+  "$defs": {
+    "DecisionItem": {
+      "additionalProperties": false,
+      "properties": {
+        "clinician_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clinician Text"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "patient_text": {
+          "description": "Exactly what the Companion may tell the patient, as signed",
+          "title": "Patient Text",
+          "type": "string"
+        },
+        "patient_text_en": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Patient Text En"
+        }
+      },
+      "required": [
+        "code",
+        "patient_text"
+      ],
+      "title": "DecisionItem",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "artifact_hash": {
@@ -6,41 +52,70 @@
       "title": "Artifact Hash",
       "type": "string"
     },
-    "artifact_id": {
-      "title": "Artifact Id",
+    "case_id": {
+      "title": "Case Id",
       "type": "string"
     },
-    "clinician_role": {
-      "title": "Clinician Role",
+    "decision_id": {
+      "description": "Id of the signed release",
+      "title": "Decision Id",
       "type": "string"
     },
-    "decision": {
-      "enum": [
-        "approved",
-        "edited",
-        "rejected"
-      ],
-      "title": "Decision",
-      "type": "string"
-    },
-    "patient_explanation_points": {
+    "items": {
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/DecisionItem"
       },
-      "title": "Patient Explanation Points",
+      "minItems": 1,
+      "title": "Items",
       "type": "array"
     },
-    "release_id": {
-      "title": "Release Id",
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "signature": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signature"
+    },
+    "signed_by": {
+      "title": "Signed By",
       "type": "string"
     }
   },
   "required": [
-    "artifact_id",
+    "case_id",
+    "decision_id",
     "artifact_hash",
-    "release_id",
-    "decision",
-    "clinician_role"
+    "signed_by",
+    "items"
   ],
   "title": "ClinicianDecision",
   "type": "object"

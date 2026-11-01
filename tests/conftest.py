@@ -25,6 +25,15 @@ MANIFEST_DIR = ROOT / "seats" / "manifests"
 FIXTURES = ROOT / "contracts" / "fixtures"
 
 
+def payload(type_: MessageType | str, index: int = 0) -> dict[str, Any]:
+    """A valid example payload from contracts/fixtures (taken from the demo's golden path)."""
+    import json
+
+    name = type_.value if isinstance(type_, MessageType) else type_
+    data: dict[str, Any] = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))["valid"][index]
+    return data
+
+
 def sha(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
 
@@ -32,9 +41,9 @@ def sha(text: str) -> str:
 class FakeRota:
     def __init__(self, table: dict[tuple[str, str], str | None] | None = None) -> None:
         self.table = table if table is not None else {
-            ("nephrology", "primary"): "dr_rossi",
-            ("nephrology", "backup"): "dr_bianchi",
-            ("nephrology", "head_of_unit"): "dr_verdi",
+            ("uro_oncology", "primary"): "dr_rossi",
+            ("uro_oncology", "backup"): "dr_bianchi",
+            ("uro_oncology", "head_of_unit"): "dr_verdi",
         }
 
     async def who(self, unit: str, role: str, at: datetime) -> str | None:

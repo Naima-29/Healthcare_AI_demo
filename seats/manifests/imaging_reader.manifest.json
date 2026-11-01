@@ -1,50 +1,66 @@
 {
   "seat": "imaging_reader",
-  "version": "1.0.0",
-  "location": "edge",
+  "name": "Imaging Reader",
+  "role": "CT signal + heat map",
+  "version": 1,
+  "location": "hospital_edge",
+  "desk": "radiology",
   "model": {
-    "provider": "vllm",
-    "name": "qwen2.5-7b-instruct"
+    "edge": "kidney-ct-cls + loopq-clin-4b",
+    "fallback": null
   },
-  "skills": [],
-  "tools": [
-    "pacs.fetch_study",
-    "ct.classify"
+  "skills": [
+    "fetch_study",
+    "classify",
+    "attention_map",
+    "quality_ood",
+    "calibrate"
   ],
-  "surfaces": [],
+  "tools": [
+    "pacs.list_studies",
+    "pacs.fetch_study",
+    "ct.classify",
+    "ct.gradcam_heatmap",
+    "ct.quality_ood_check",
+    "a2a.send"
+  ],
+  "surfaces": [
+    "pacs",
+    "imaging"
+  ],
   "memory": {
     "read": [
-      "L0",
-      "L1"
+      0,
+      1,
+      3
     ],
     "write": [
-      "L0",
-      "L1"
+      3
     ]
   },
   "refuses": [
-    "no_diagnosis",
-    "no_prescribing",
-    "no_result_disclosure",
-    "no_identifiable_data_to_cloud",
-    "no_patient_contact"
+    "label_as_diagnosis",
+    "report_to_patient",
+    "alter_image"
   ],
   "gates": [
-    {
-      "artifact": "imaging_signal",
-      "signer_role": "clinician:radiology"
-    }
+    "radiologist_review"
   ],
   "a2a_peers": [
     "safety_verifier"
   ],
-  "consumes": [
-    "acknowledgment"
-  ],
+  "artifact": "imaging_signal{label, p_calibrated, heatmap, cam_metrics, quality, provenance}",
+  "unit": {
+    "kind": "per_study",
+    "tc": 20
+  },
+  "job_description": "Read the kidney CT as soon as it reaches PACS. Run the classifier and the attention heat map, check image quality and out-of-distribution risk, calibrate the confidence, and return a preliminary imaging signal to the clinician's board only, through the Dispatcher, for the Safety Verifier and the Case Briefer. Never call it a diagnosis, never report anything to the patient, never alter the image. Radiologist review is required.",
+  "compiled_by": "chief_of_staff (seed)",
+  "compiled_at": "2026-10-12T08:00:00Z",
   "emits": [
     "imaging_signal"
   ],
-  "artifact": null,
-  "unit": "radiology",
-  "job_description": "Run the CT model on new kidney studies and report a calibrated signal with a heat map to radiologists only."
+  "consumes": [
+    "acknowledgment"
+  ]
 }

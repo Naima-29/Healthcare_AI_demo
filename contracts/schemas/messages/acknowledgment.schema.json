@@ -2,7 +2,6 @@
   "additionalProperties": false,
   "properties": {
     "ack_of": {
-      "format": "uuid",
       "title": "Ack Of",
       "type": "string"
     },
@@ -21,6 +20,7 @@
     "status": {
       "enum": [
         "received",
+        "routed",
         "accepted",
         "rejected"
       ],
