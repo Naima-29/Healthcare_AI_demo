@@ -1,0 +1,30 @@
+{
+  "valid": [
+    {
+      "artifact_id": "cp_001",
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "release_id": "rel_001",
+      "decision": "edited",
+      "clinician_role": "clinician:nephrology",
+      "patient_explanation_points": [
+        "stop ibuprofen",
+        "use paracetamol"
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "artifact_id": "a",
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "release_id": "r",
+      "decision": "maybe",
+      "clinician_role": "c"
+    },
+    {
+      "artifact_id": "a",
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "approved",
+      "clinician_role": "c"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "seat": "case_briefer",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [],
+  "tools": [
+    "board.publish_case_pack",
+    "km.lookup"
+  ],
+  "surfaces": [
+    "clinical_board"
+  ],
+  "memory": {
+    "read": [
+      "L0",
+      "L1",
+      "L2"
+    ],
+    "write": [
+      "L0"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact"
+  ],
+  "gates": [
+    {
+      "artifact": "case_pack",
+      "signer_role": "clinician:nephrology"
+    }
+  ],
+  "a2a_peers": [
+    "dispatcher",
+    "companion",
+    "archivist",
+    "genomics_interpreter"
+  ],
+  "consumes": [
+    "therapy_conflict",
+    "imaging_signal",
+    "data_delivered",
+    "red_flag_escalation",
+    "acknowledgment"
+  ],
+  "emits": [
+    "case_pack_ready",
+    "clinician_decision",
+    "data_request"
+  ],
+  "artifact": "case_pack",
+  "unit": "nephrology",
+  "job_description": "Assemble verified findings into one SBAR case pack for the right clinician, with every sentence linked to evidence. Emit the clinician's signed decision."
+}

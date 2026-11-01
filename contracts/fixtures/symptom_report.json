@@ -1,0 +1,35 @@
+{
+  "valid": [
+    {
+      "symptoms": [
+        {
+          "code": "flank_pain",
+          "label": "Flank pain",
+          "severity": 6,
+          "source_text": "my side hurts since yesterday"
+        }
+      ],
+      "language": "it",
+      "channel": "telegram",
+      "distress_score": 0.4
+    }
+  ],
+  "invalid": [
+    {
+      "symptoms": [],
+      "language": "it",
+      "channel": "telegram"
+    },
+    {
+      "symptoms": [
+        {
+          "code": "x",
+          "label": "x",
+          "severity": 11
+        }
+      ],
+      "language": "it",
+      "channel": "telegram"
+    }
+  ]
+}

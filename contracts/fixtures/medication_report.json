@@ -1,0 +1,27 @@
+{
+  "valid": [
+    {
+      "medications": [
+        {
+          "name": "ibuprofen",
+          "dose": "400 mg",
+          "frequency": "3x/day",
+          "source": "patient_reported"
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "medications": []
+    },
+    {
+      "medications": [
+        {
+          "name": "x",
+          "source": "guess"
+        }
+      ]
+    }
+  ]
+}

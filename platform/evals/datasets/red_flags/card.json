@@ -1,0 +1,21 @@
+{
+  "name": "red_flags",
+  "version": "0.1.0",
+  "task": "red_flag",
+  "labels": ["none", "medium", "high"],
+  "description": "Single patient messages to the Companion, labelled with the urgency the care team should act on. Context: adult in kidney / RCC follow-up.",
+  "label_guide": {
+    "high": "Needs a doctor today: visible haematuria + severe one-sided flank pain (>= 7/10) + systemic signs or RCC history; syncope; anuria >= 24 h; chest pain; severe breathlessness.",
+    "medium": "A single red-flag symptom the care team should review soon (e.g. visible haematuria alone, severe flank pain alone, fever in a patient on TKI).",
+    "none": "No red flag, including negated symptoms and routine questions."
+  },
+  "source": "Hand-written by the ML engineer from the demo golden path and common paraphrases. Synthetic, no patient data.",
+  "labeller": "ML engineer (draft)",
+  "review_status": "draft",
+  "created": "2026-10-17",
+  "thresholds": {
+    "high.recall": 0.98,
+    "critical_recall": 1.0,
+    "any_flag.recall": 0.9
+  }
+}

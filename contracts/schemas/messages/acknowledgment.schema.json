@@ -1,0 +1,37 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "ack_of": {
+      "format": "uuid",
+      "title": "Ack Of",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "enum": [
+        "received",
+        "accepted",
+        "rejected"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ack_of",
+    "status"
+  ],
+  "title": "Acknowledgment",
+  "type": "object"
+}

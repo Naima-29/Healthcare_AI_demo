@@ -1,0 +1,45 @@
+{
+  "seat": "chief_of_staff",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [],
+  "tools": [
+    "control_plane.propose_manifest"
+  ],
+  "surfaces": [
+    "director_console"
+  ],
+  "memory": {
+    "read": [
+      "L0",
+      "L3"
+    ],
+    "write": [
+      "L0"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact",
+    "no_self_activation"
+  ],
+  "gates": [
+    {
+      "artifact": "manifest_change",
+      "signer_role": "director"
+    }
+  ],
+  "a2a_peers": [],
+  "consumes": [],
+  "emits": [],
+  "artifact": null,
+  "unit": "direction",
+  "job_description": "Turn the Hospital Director's plain-language requests into manifest drafts with a diff. Never activate a manifest; the Director approves."
+}

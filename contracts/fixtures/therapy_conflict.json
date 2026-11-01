@@ -1,0 +1,43 @@
+{
+  "valid": [
+    {
+      "drug": "ibuprofen",
+      "condition": "CKD stage 3b",
+      "rule_id": "DD-NSAID-CKD",
+      "severity": "contraindicated",
+      "explanation": "NSAIDs reduce renal perfusion in CKD.",
+      "options": [
+        "paracetamol"
+      ],
+      "citations": [
+        {
+          "source": "KDIGO 2024",
+          "ref": "3.4.1"
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "drug": "x",
+      "condition": "y",
+      "rule_id": "r",
+      "severity": "caution",
+      "explanation": "e",
+      "citations": []
+    },
+    {
+      "drug": "x",
+      "condition": "y",
+      "rule_id": "r",
+      "severity": "fatal",
+      "explanation": "e",
+      "citations": [
+        {
+          "source": "s",
+          "ref": "r"
+        }
+      ]
+    }
+  ]
+}

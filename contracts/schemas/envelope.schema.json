@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "MessageType": {
+      "enum": [
+        "symptom_report",
+        "medication_report",
+        "red_flag_escalation",
+        "data_request",
+        "data_delivered",
+        "imaging_signal",
+        "therapy_conflict",
+        "case_pack_ready",
+        "clinician_decision",
+        "acknowledgment"
+      ],
+      "title": "MessageType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "causation_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Causation Id"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "episode_id": {
+      "title": "Episode Id",
+      "type": "string"
+    },
+    "from": {
+      "pattern": "^[a-z][a-z0-9_]{1,40}$",
+      "title": "From",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "manifest_version": {
+      "description": "'<seat>@<semver>' of the sender's active manifest",
+      "title": "Manifest Version",
+      "type": "string"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sig": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Ed25519 signature (base64url) over the JCS form without sig",
+      "title": "Sig"
+    },
+    "to": {
+      "pattern": "^[a-z][a-z0-9_]{1,40}$",
+      "title": "To",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/MessageType"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "from",
+    "to",
+    "patient_id",
+    "episode_id",
+    "correlation_id",
+    "idempotency_key",
+    "created_at",
+    "manifest_version",
+    "payload"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}

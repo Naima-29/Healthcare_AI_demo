@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "RequestedItem": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "lab",
+            "imaging",
+            "vitals",
+            "genomics"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_age_days": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Age Days"
+        }
+      },
+      "required": [
+        "kind",
+        "code"
+      ],
+      "title": "RequestedItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/RequestedItem"
+      },
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "items",
+    "reason"
+  ],
+  "title": "DataRequest",
+  "type": "object"
+}

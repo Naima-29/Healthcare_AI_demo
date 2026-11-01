@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "Section, rule id or URL",
+          "title": "Ref",
+          "type": "string"
+        },
+        "source": {
+          "description": "Guideline or rule source, e.g. 'KDIGO 2024'",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "ref"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "message",
+            "observation",
+            "study",
+            "document",
+            "variant",
+            "series"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceRef"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "in_reply_to": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "In Reply To"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "lab",
+        "vitals",
+        "wearable_series",
+        "genomic_context",
+        "document"
+      ],
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "items"
+  ],
+  "title": "DataDelivered",
+  "type": "object"
+}

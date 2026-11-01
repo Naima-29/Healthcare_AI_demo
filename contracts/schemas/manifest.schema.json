@@ -1,0 +1,213 @@
+{
+  "$defs": {
+    "GateSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "description": "Artifact kind held for review, e.g. 'case_pack'",
+          "title": "Artifact",
+          "type": "string"
+        },
+        "signer_role": {
+          "description": "Role that must sign, e.g. 'clinician:radiology'",
+          "title": "Signer Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "signer_role"
+      ],
+      "title": "GateSpec",
+      "type": "object"
+    },
+    "MemoryScopes": {
+      "additionalProperties": false,
+      "properties": {
+        "read": {
+          "items": {
+            "enum": [
+              "L0",
+              "L1",
+              "L2",
+              "L3"
+            ],
+            "type": "string"
+          },
+          "title": "Read",
+          "type": "array"
+        },
+        "write": {
+          "items": {
+            "enum": [
+              "L0",
+              "L1",
+              "L2",
+              "L3"
+            ],
+            "type": "string"
+          },
+          "title": "Write",
+          "type": "array"
+        }
+      },
+      "title": "MemoryScopes",
+      "type": "object"
+    },
+    "MessageType": {
+      "enum": [
+        "symptom_report",
+        "medication_report",
+        "red_flag_escalation",
+        "data_request",
+        "data_delivered",
+        "imaging_signal",
+        "therapy_conflict",
+        "case_pack_ready",
+        "clinician_decision",
+        "acknowledgment"
+      ],
+      "title": "MessageType",
+      "type": "string"
+    },
+    "ModelSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "vllm",
+            "ollama",
+            "cloud_deidentified",
+            "none"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "name"
+      ],
+      "title": "ModelSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "a2a_peers": {
+      "items": {
+        "type": "string"
+      },
+      "title": "A2A Peers",
+      "type": "array"
+    },
+    "artifact": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Artifact"
+    },
+    "consumes": {
+      "items": {
+        "$ref": "#/$defs/MessageType"
+      },
+      "title": "Consumes",
+      "type": "array"
+    },
+    "emits": {
+      "items": {
+        "$ref": "#/$defs/MessageType"
+      },
+      "title": "Emits",
+      "type": "array"
+    },
+    "gates": {
+      "items": {
+        "$ref": "#/$defs/GateSpec"
+      },
+      "title": "Gates",
+      "type": "array"
+    },
+    "job_description": {
+      "title": "Job Description",
+      "type": "string"
+    },
+    "location": {
+      "enum": [
+        "edge",
+        "device",
+        "cloud"
+      ],
+      "title": "Location",
+      "type": "string"
+    },
+    "memory": {
+      "$ref": "#/$defs/MemoryScopes"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelSpec"
+    },
+    "refuses": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Refuses",
+      "type": "array"
+    },
+    "seat": {
+      "pattern": "^[a-z][a-z0-9_]{1,40}$",
+      "title": "Seat",
+      "type": "string"
+    },
+    "skills": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Skills",
+      "type": "array"
+    },
+    "surfaces": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Surfaces",
+      "type": "array"
+    },
+    "tools": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "unit": {
+      "title": "Unit",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "seat",
+    "version",
+    "location",
+    "model",
+    "unit",
+    "job_description"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

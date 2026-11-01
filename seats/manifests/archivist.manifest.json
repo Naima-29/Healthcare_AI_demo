@@ -1,0 +1,59 @@
+{
+  "seat": "archivist",
+  "version": "1.1.0",
+  "location": "edge",
+  "model": {
+    "provider": "none",
+    "name": "rule templates (no model)"
+  },
+  "skills": [
+    "evidence_append",
+    "rule_propose"
+  ],
+  "tools": [
+    "board.read_artifact"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0",
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "write": [
+      "L0",
+      "L1",
+      "L2",
+      "L3"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact",
+    "no_rule_self_confirmation",
+    "no_patient_data_in_weights"
+  ],
+  "gates": [
+    {
+      "artifact": "knowledge_rule",
+      "signer_role": "clinician:nephrology"
+    }
+  ],
+  "a2a_peers": [
+    "dispatcher"
+  ],
+  "consumes": [
+    "clinician_decision"
+  ],
+  "emits": [
+    "acknowledgment",
+    "case_pack_ready"
+  ],
+  "artifact": "knowledge_rule",
+  "unit": "nephrology",
+  "job_description": "Turn every signed clinician decision into durable, typed memory. Verify the clinician's release, write the evidence to the append-only evidence store, then propose versioned rules for the patient or the hospital, in trial mode until a clinician confirms them. Never store without evidence, never confirm a rule yourself, never write patient data into shared model weights."
+}

@@ -1,0 +1,58 @@
+{
+  "seat": "imaging_reader",
+  "version": "1.1.0",
+  "location": "edge",
+  "model": {
+    "provider": "none",
+    "name": "kidney-ct-cls (Person 5), called through ct.classify"
+  },
+  "skills": [
+    "fetch_study",
+    "classify",
+    "attention_map",
+    "quality_ood",
+    "calibrate"
+  ],
+  "tools": [
+    "pacs.list_studies",
+    "pacs.fetch_study",
+    "ct.classify"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0",
+      "L1"
+    ],
+    "write": [
+      "L0",
+      "L1"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact",
+    "no_image_alteration"
+  ],
+  "gates": [
+    {
+      "artifact": "imaging_signal",
+      "signer_role": "clinician:radiology"
+    }
+  ],
+  "a2a_peers": [
+    "safety_verifier"
+  ],
+  "consumes": [
+    "acknowledgment"
+  ],
+  "emits": [
+    "imaging_signal"
+  ],
+  "artifact": "imaging_signal",
+  "unit": "radiology",
+  "job_description": "Read the kidney CT as soon as it reaches PACS. Run the classifier and the attention heat map, check image quality and out-of-distribution risk, calibrate the confidence, and return a preliminary imaging signal for the clinicians only, through the Safety Verifier. Never call it a diagnosis, never report anything to the patient, never alter the image. Radiologist review is required."
+}

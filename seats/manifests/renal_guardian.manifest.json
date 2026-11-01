@@ -1,0 +1,57 @@
+{
+  "seat": "renal_guardian",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [
+    "kdigo_staging",
+    "drug_disease_rules"
+  ],
+  "tools": [
+    "fhir.read_observations",
+    "fhir.read_medications",
+    "lab.read_results",
+    "km.lookup"
+  ],
+  "surfaces": [],
+  "memory": {
+    "read": [
+      "L0",
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "write": [
+      "L0"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud",
+    "no_patient_contact"
+  ],
+  "gates": [],
+  "a2a_peers": [
+    "safety_verifier",
+    "companion"
+  ],
+  "consumes": [
+    "symptom_report",
+    "medication_report",
+    "data_delivered",
+    "acknowledgment"
+  ],
+  "emits": [
+    "therapy_conflict",
+    "data_request",
+    "acknowledgment"
+  ],
+  "artifact": null,
+  "unit": "nephrology",
+  "job_description": "Track eGFR trend and CKD stage, ask for fresh labs when data is stale, and flag drug-disease conflicts with citations."
+}

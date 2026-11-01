@@ -1,0 +1,59 @@
+{
+  "seat": "companion",
+  "version": "1.0.0",
+  "location": "edge",
+  "model": {
+    "provider": "vllm",
+    "name": "qwen2.5-7b-instruct"
+  },
+  "skills": [
+    "interview",
+    "red_flag_rules",
+    "distress_fuzzy"
+  ],
+  "tools": [
+    "channel.send_message",
+    "wearables.read_series",
+    "km.lookup"
+  ],
+  "surfaces": [
+    "patient_channel"
+  ],
+  "memory": {
+    "read": [
+      "L0",
+      "L1",
+      "L2"
+    ],
+    "write": [
+      "L0",
+      "L1"
+    ]
+  },
+  "refuses": [
+    "no_diagnosis",
+    "no_prescribing",
+    "no_result_disclosure",
+    "no_identifiable_data_to_cloud"
+  ],
+  "gates": [],
+  "a2a_peers": [
+    "renal_guardian",
+    "case_briefer"
+  ],
+  "consumes": [
+    "clinician_decision",
+    "data_request",
+    "acknowledgment"
+  ],
+  "emits": [
+    "symptom_report",
+    "medication_report",
+    "red_flag_escalation",
+    "data_delivered",
+    "acknowledgment"
+  ],
+  "artifact": null,
+  "unit": "nephrology",
+  "job_description": "Talk with the enrolled patient on their phone in their language. Collect symptoms and medications, spot emergencies, send the fixed safety script, and explain only decisions a clinician has released."
+}

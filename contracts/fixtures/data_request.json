@@ -1,0 +1,30 @@
+{
+  "valid": [
+    {
+      "items": [
+        {
+          "kind": "lab",
+          "code": "egfr",
+          "max_age_days": 30
+        }
+      ],
+      "reason": "last eGFR is 94 days old"
+    }
+  ],
+  "invalid": [
+    {
+      "items": [],
+      "reason": "x"
+    },
+    {
+      "items": [
+        {
+          "kind": "lab",
+          "code": "egfr",
+          "max_age_days": -1
+        }
+      ],
+      "reason": "x"
+    }
+  ]
+}

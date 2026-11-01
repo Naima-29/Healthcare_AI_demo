@@ -1,0 +1,47 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "artifact_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Artifact Hash",
+      "type": "string"
+    },
+    "artifact_id": {
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "clinician_role": {
+      "title": "Clinician Role",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "approved",
+        "edited",
+        "rejected"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "patient_explanation_points": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Patient Explanation Points",
+      "type": "array"
+    },
+    "release_id": {
+      "title": "Release Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "artifact_id",
+    "artifact_hash",
+    "release_id",
+    "decision",
+    "clinician_role"
+  ],
+  "title": "ClinicianDecision",
+  "type": "object"
+}
