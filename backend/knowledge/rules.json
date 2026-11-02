@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "version": 1,
+    "status": "draft",
+    "reviewed_by": null,
+    "note": "Medical content copied unchanged from the original km.mjs. A clinician must review it before any real use."
+  },
+
+  "citations": {
+    "KDIGO2024": "[14] KDIGO 2024 CKD Guideline, Kidney Int 2024;105(4S):S117-S314",
+    "EAU_RCC": "[15] EAU Guidelines on Renal Cell Carcinoma (current edition)",
+    "ACMG2015": "[16] Richards S et al. ACMG/AMP variant interpretation, Genet Med 2015;17:405-424",
+    "VHL2011": "[17] Maher ER et al. von Hippel-Lindau disease, Eur J Hum Genet 2011;19:617-623",
+    "BEERS2023": "[3] AGS Beers Criteria 2023 update, J Am Geriatr Soc 2023;71:2052-2081",
+    "TKI_LABEL": "Sunitinib SmPC - hypertension and proteinuria are labelled adverse effects",
+    "PLAYBOOK": "L1 nephro-oncology playbook (Loop demo; to be validated by the clinical team)",
+    "APOL1": "APOL1-mediated kidney disease: high-risk genotype = two risk alleles (G1/G2), recessive model"
+  },
+
+  "drug_classes": [
+    {
+      "class": "NSAID",
+      "label": "ibuprofen",
+      "names": [
+        "ibuprofen", "ibuprofene", "ibuprofeno", "brufen", "moment", "nurofen",
+        "ketoprofen", "ketoprofene", "ketoprofeno", "oki", "diclofenac", "voltaren",
+        "naprossene", "naproxen", "aspirin", "aspirina", "aspirine", "nsaid", "fans"
+      ],
+      "needs_review": {
+        "moment": "Also an ordinary English word, so it can match normal sentences.",
+        "oki": "Very short brand name, so it can match inside other text.",
+        "fans": "Also an ordinary English word.",
+        "aspirin": "Low-dose aspirin may need different treatment from other NSAIDs. Ask the clinician."
+      }
+    },
+    {
+      "class": "non_NSAID_analgesic",
+      "label": "paracetamol",
+      "names": [
+        "paracetamol", "paracetamole", "paracetamolo", "tachipirina", "acetaminophen"
+      ],
+      "needs_review": {}
+    }
+  ],
+
+  "ckd_stages": [
+    { "stage": "G1",  "min_egfr": 90 },
+    { "stage": "G2",  "min_egfr": 60 },
+    { "stage": "G3a", "min_egfr": 45 },
+    { "stage": "G3b", "min_egfr": 30 },
+    { "stage": "G4",  "min_egfr": 15 },
+    { "stage": "G5",  "min_egfr": null }
+  ],
+  "ckd_stage_citation": "KDIGO2024",
+
+  "conflict_rules": [
+    {
+      "id": "nsaid_renal_and_blood_pressure",
+      "drug_class": "NSAID",
+      "display_drug": "NSAID (ibuprofen)",
+      "rationale": "NSAIDs reduce renal perfusion and raise blood pressure; prolonged use is to be avoided in CKD, particularly with eGFR < 60 and uncontrolled hypertension.",
+      "severity": { "one_reason": "moderate", "two_or_more_reasons": "high" },
+      "status": "draft",
+      "reviewed_by": null,
+      "triggers": [
+        {
+          "id": "low_egfr",
+          "type": "egfr_below",
+          "value": 60,
+          "reason": "CKD {stage} (eGFR {egfr})",
+          "citation": "KDIGO2024"
+        },
+        {
+          "id": "high_blood_pressure",
+          "type": "hypertension",
+          "sbp_at_least": 140,
+          "reason": "hypertension",
+          "reason_with_sbp": "hypertension (home SBP ~{sbp} mmHg)",
+          "citation": "BEERS2023",
+          "needs_review": "Beers criteria apply to adults aged 65 and over. Ask the clinician for a better source."
+        },
+        {
+          "id": "tki_therapy",
+          "type": "medication_contains",
+          "names": ["sunitinib", "tki"],
+          "reason": "TKI therapy (hypertension, proteinuria)",
+          "citation": "TKI_LABEL"
+        }
+      ]
+    }
+  ]
+}
