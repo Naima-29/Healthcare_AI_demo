@@ -1,0 +1,72 @@
+{
+  "version": "0.1.0",
+  "status": "draft: to be reviewed by a geneticist and merged into the Knowledge Model by Diana (Person 4)",
+  "citations": {
+    "ACMG2015": "[16] Richards S et al. ACMG/AMP variant interpretation, Genet Med 2015;17:405-424",
+    "VHL2011": "[17] Maher ER et al. von Hippel-Lindau disease, Eur J Hum Genet 2011;19:617-623",
+    "APOL1": "APOL1-mediated kidney disease: high-risk genotype = two risk alleles (G1/G2), recessive model",
+    "EAU_RCC": "[15] EAU Guidelines on Renal Cell Carcinoma (current edition)"
+  },
+  "gene_rules": [
+    {
+      "id": "VHL-PATHOGENIC",
+      "genes": ["VHL"],
+      "classifications": ["pathogenic", "likely_pathogenic"],
+      "relevance": "high",
+      "actionable": true,
+      "hereditary_syndrome": "von Hippel-Lindau disease",
+      "summary": "Hereditary predisposition to clear-cell RCC (von Hippel-Lindau). New, multifocal or contralateral tumours are possible.",
+      "case_implications": [
+        { "when_history": "rcc", "text": "Hereditary risk of new tumours: kidney-sparing options and lifelong surveillance matter." },
+        { "text": "Family counselling to be considered by a geneticist." }
+      ],
+      "citations": ["VHL2011", "ACMG2015"]
+    },
+    {
+      "id": "HEREDITARY-RCC-PATHOGENIC",
+      "genes": ["FH", "FLCN", "MET", "BAP1", "SDHB", "SDHC", "SDHD", "TSC1", "TSC2", "PTEN"],
+      "classifications": ["pathogenic", "likely_pathogenic"],
+      "relevance": "high",
+      "actionable": true,
+      "hereditary_syndrome": "hereditary RCC predisposition",
+      "summary": "Pathogenic variant in a hereditary renal cancer predisposition gene.",
+      "case_implications": [
+        { "text": "Hereditary RCC syndrome to be confirmed by a geneticist; it can change surveillance and surgical planning." }
+      ],
+      "citations": ["EAU_RCC", "ACMG2015"]
+    },
+    {
+      "id": "APOL1-HIGH-RISK",
+      "genes": ["APOL1"],
+      "classifications": ["risk_allele"],
+      "min_risk_alleles": 2,
+      "relevance": "moderate",
+      "actionable": false,
+      "summary": "High-risk APOL1 genotype (two risk alleles): increased risk of CKD progression.",
+      "case_implications": [
+        { "text": "Two APOL1 risk alleles: relevant to kidney-function follow-up (Renal Guardian)." }
+      ],
+      "citations": ["APOL1"]
+    },
+    {
+      "id": "APOL1-SINGLE",
+      "genes": ["APOL1"],
+      "classifications": ["risk_allele"],
+      "max_risk_alleles": 1,
+      "relevance": "low",
+      "actionable": false,
+      "summary": "Single APOL1 risk allele (carrier). The high-risk genotype needs two risk alleles; on its own this is not expected to drive CKD progression.",
+      "case_implications": [],
+      "citations": ["APOL1"]
+    }
+  ],
+  "class_defaults": {
+    "pathogenic": { "relevance": "review", "actionable": false, "summary": "Pathogenic per the laboratory. No gene-specific rule in the Knowledge Model: geneticist review required.", "citations": ["ACMG2015"] },
+    "likely_pathogenic": { "relevance": "review", "actionable": false, "summary": "Likely pathogenic per the laboratory. No gene-specific rule in the Knowledge Model: geneticist review required.", "citations": ["ACMG2015"] },
+    "risk_allele": { "relevance": "review", "actionable": false, "summary": "Risk allele per the laboratory. No gene-specific rule in the Knowledge Model: geneticist review required.", "citations": [] },
+    "vus": { "relevance": "none", "actionable": false, "summary": "Variant of uncertain significance: not clinically actionable; do not use for decisions.", "citations": ["ACMG2015"] },
+    "likely_benign": { "relevance": "filtered", "actionable": false, "summary": "Likely benign: not reported.", "citations": ["ACMG2015"] },
+    "benign": { "relevance": "filtered", "actionable": false, "summary": "Benign: not reported.", "citations": ["ACMG2015"] },
+    "unrecognized": { "relevance": "unknown", "actionable": false, "summary": "The laboratory classification is not recognised: geneticist review required.", "citations": [] }
+  }
+}

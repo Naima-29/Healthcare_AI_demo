@@ -1,0 +1,17 @@
+{
+  "genomic_profile_id": "GEN-NA2024-7842",
+  "patient_id": "marco-r",
+  "profiling_date": "2024-05-15",
+  "profiling_method": "Targeted NGS Panel (NephroGenome v2.1)",
+  "synthetic": true,
+  "variants": [
+    { "gene": "VHL", "variant_id": "rs387906523", "hgvs_notation": "c.482G>A (p.Arg161Gln)", "zygosity": "heterozygous",
+      "clinical_significance": "pathogenic", "associated_condition": "Clear cell renal cell carcinoma", "evidence_level": "strong" },
+    { "gene": "APOL1", "variant_id": "rs73885319", "hgvs_notation": "c.1024A>G (p.Ser342Gly)", "zygosity": "heterozygous",
+      "clinical_significance": "risk_allele", "associated_condition": "APOL1-mediated kidney disease (risk)", "evidence_level": "moderate" },
+    { "gene": "PBRM1", "variant_id": "rs1456789012", "hgvs_notation": "c.2134C>T (p.Pro712Ser)", "zygosity": "heterozygous",
+      "clinical_significance": "VUS", "associated_condition": "Clear cell renal cell carcinoma", "evidence_level": "limited" },
+    { "gene": "BAP1", "variant_id": "rs776543210", "hgvs_notation": "c.1892A>G (p.Lys631Arg)", "zygosity": "heterozygous",
+      "clinical_significance": "benign", "associated_condition": "Renal cell carcinoma predisposition", "evidence_level": "strong" }
+  ]
+}

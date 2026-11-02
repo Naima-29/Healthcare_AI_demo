@@ -1,0 +1,41 @@
+name: evidence-database
+
+on:
+  push:
+    paths: ["platform/**", "core/**", "contracts/**", "seats/**", ".github/workflows/evals.yml"]
+  pull_request:
+    paths: ["platform/**", "core/**", "contracts/**", "seats/**", ".github/workflows/evals.yml"]
+
+jobs:
+  platform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install kcd_core and the slice dependencies
+        run: pip install -e . "numpy>=1.26" "pillow>=10.0" "sqlalchemy>=2.0" pytest
+      - name: Slice tests (on kcd_core)
+        working-directory: platform
+        run: python -W error -m pytest -q -p no:asyncio
+      - name: Validate datasets
+        working-directory: platform
+        run: |
+          python -m evals validate red_flags
+          python -m evals validate genomics_relevance
+      # No --gate while the dataset is a draft; add it once the clinical lead has reviewed the labels.
+      - name: Red-flag baseline
+        working-directory: platform
+        run: python -m evals run red_flags --target rules_baseline
+      # Regression check: the variant rules must keep agreeing with the agreed labels.
+      - name: Genomics rules
+        working-directory: platform
+        run: python -m evals run genomics_relevance --target genomics_rules --gate
+      - name: Demo runs end to end
+        working-directory: platform
+        run: python -m kcd.demo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: platform/reports/
