@@ -9,10 +9,11 @@ from kcd_core.pep import PolicyViolation
 
 from kcd.cortex import Cortex
 from kcd.desk import Desk
+from kcd.fhir import FolderFhir
 from kcd.genomics.panel import PanelError, normalize_classification, parse_panel_json, parse_vcf, zygosity_from_gt
 from kcd.genomics.rules import RulesError, VariantRules, interpret
 from kcd.genomics.source import FolderPanelSource
-from kcd.seats.genomics_interpreter import GenomicsInterpreter, history_from_summary
+from kcd.seats.genomics_interpreter import GenomicsInterpreter, history_from_conditions
 from kcd.tools import genomics_tools
 from tests.helpers import DEMO_PANEL
 
@@ -140,7 +141,9 @@ class RulesTest(unittest.TestCase):
             VariantRules.from_dict(broken)
 
 
-GENOMICS_REQUEST = {"items": [{"kind": "genomics", "code": "genomic_context"}], "reason": "case pack"}
+GENOMICS_REQUEST = {"what": "genomic_context", "why": "case pack: hereditary context"}
+FHIR_RCC = {"resourceType": "Bundle", "entry": [{"resource": {
+    "resourceType": "Condition", "code": {"coding": [{"code": "C64.1", "display": "Clear-cell RCC"}]}}}]}
 
 
 class InterpreterSeatTest(unittest.IsolatedAsyncioTestCase):
@@ -151,12 +154,12 @@ class InterpreterSeatTest(unittest.IsolatedAsyncioTestCase):
         panel["patient_id"] = "pt_marco"
         (self.root / "pt_marco").mkdir()
         (self.root / "pt_marco" / "panel.json").write_text(json.dumps(panel))
+        (self.root / "pt_marco" / "fhir-bundle.json").write_text(json.dumps(FHIR_RCC))  # must not be read as a panel
         self.desk = await Desk.create()
         self.cortex = Cortex()
         self.seat = GenomicsInterpreter(self.cortex)
-        self.tools = genomics_tools(FolderPanelSource(self.root),
-                                    patients={"pt_marco": {"conditions": ["Clear cell renal cell carcinoma"]}})
-        self.rt = await self.desk.add_seat(self.seat, self.tools)
+        self.rt = await self.desk.add_seat(self.seat, genomics_tools(FolderPanelSource(self.root),
+                                                                     FolderFhir(self.root)))
 
     async def asyncTearDown(self):
         await self.desk.close()
@@ -175,36 +178,34 @@ class InterpreterSeatTest(unittest.IsolatedAsyncioTestCase):
         return self.desk.audit.find("seat.policy_violation", "blocked")
 
     async def test_data_request_to_genomic_context(self):
-        req = await self.request()
+        await self.request()
         self.assertEqual(self.desk.bus.dead_letters, [])
         env = self.delivered()[0]
         self.assertEqual((env.type, env.from_), (MessageType.DATA_DELIVERED, "genomics_interpreter"))
-        dd = DataDelivered.model_validate(env.payload)  # Core's frozen contract
-        self.assertEqual((dd.kind, dd.in_reply_to), ("genomic_context", req.id))
-        summary, *findings = dd.items
-        self.assertEqual(summary["type"], "panel_summary")
+        dd = DataDelivered.model_validate(env.payload)  # Core's contract
+        self.assertEqual(dd.kind, "genomic_context")
+        findings = dd.data["findings"]
         self.assertEqual({f["gene"]: f["relevance"] for f in findings},
                          {"VHL": "high", "APOL1": "low", "PBRM1": "none"})
-        self.assertIn("kidney-sparing", " ".join(summary["case_implications"]))  # RCC history from fhir.read_patient
-        self.assertEqual(summary["not_reported"][0]["gene"], "BAP1")
-        self.assertIn("ACMG2015", {c.source for c in dd.citations})
-        panel_ref = dd.evidence[0].ref.removeprefix("cortex:evidence/")
-        ev = self.cortex.get_evidence(3, "pt_marco", panel_ref)
+        self.assertIn("kidney-sparing", " ".join(dd.data["case_implications"]))  # RCC history from FHIR
+        self.assertEqual(dd.data["not_reported"][0]["gene"], "BAP1")
+        self.assertTrue(any("ACMG" in c for c in dd.citations))
+        ev = self.cortex.get_evidence(3, "pt_marco", dd.evidence_id)
         self.assertEqual(ev["kind"], "genomic_panel")
         self.assertEqual(self.cortex.read_blob(3, "pt_marco", ev["blob_sha256"]),
                          (self.root / "pt_marco" / "panel.json").read_bytes())
 
-    async def test_non_genomics_request_is_ignored(self):
-        await self.request({"items": [{"kind": "lab", "code": "egfr"}], "reason": "x"})
-        self.assertEqual(self.delivered(), [])
-        self.assertEqual(self.cortex.list_evidence(3, "pt_marco"), [])
+    async def test_requests_by_item_kind_and_others_ignored(self):
+        await self.request({"what": "x", "why": "y", "items": [{"kind": "genomics", "code": "panel"}]})
+        self.assertEqual(len(self.delivered()), 1)
+        await self.request({"what": "recent eGFR", "why": "y", "items": [{"kind": "lab", "code": "egfr"}]})
+        self.assertEqual(len(self.delivered()), 1)
 
     async def test_without_rcc_history_no_kidney_sparing_note(self):
-        summaries = genomics_tools(FolderPanelSource(self.root))  # no conditions known
-        self.rt.tools.register("fhir.read_patient", summaries["fhir.read_patient"])
+        (self.root / "pt_marco" / "fhir-bundle.json").write_text(json.dumps({"entry": []}))
         await self.request()
-        summary = DataDelivered.model_validate(self.delivered()[0].payload).items[0]
-        self.assertNotIn("kidney-sparing", " ".join(summary["case_implications"]))
+        data = DataDelivered.model_validate(self.delivered()[0].payload).data
+        self.assertNotIn("kidney-sparing", " ".join(data["case_implications"]))
 
     async def test_redelivery_is_processed_once(self):
         env = await self.request()
@@ -223,37 +224,35 @@ class InterpreterSeatTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_policy(self):
         ctx = self.rt.context()
-        for tool, refusal in (("genomics.write_classification", "no_variant_reclassification"),
-                              ("channel.send_message", "no_patient_contact")):
+        for action, refusal in (("genomics.reclassify", "reclassify_variants"),
+                                ("patient.disclose_genetics", "disclose_genetics_to_patient"),
+                                ("patient.send", "send_to_patient")):
             with self.assertRaises(PolicyViolation) as cm:
-                ctx.pep.check_tool(tool)
+                ctx.act(action)
             self.assertEqual(cm.exception.refusal, refusal)
         with self.assertRaises(PolicyViolation) as cm:
-            ctx.guard_content("genomic_result")
-        self.assertEqual(cm.exception.refusal, "no_result_disclosure")
+            ctx.guard_content("genetic_result")
+        self.assertEqual(cm.exception.refusal, "disclose_genetics_to_patient")
 
     async def test_reclassification_guard(self):
-        import kcd.seats.genomics_interpreter as mod
-        real = mod.interpret
+        real = self.rt.tools.get("km.interpret_variant")
 
-        def tampering(panel, rules, context=None):
-            out = real(panel, rules, context)
+        async def tampering(**kwargs):
+            out = await real(**kwargs)
             out["findings"][0]["lab_classification"] = "benign"
             return out
 
-        mod.interpret = tampering
-        try:
-            await self.request()
-        finally:
-            mod.interpret = real
+        self.rt.tools.register("km.interpret_variant", tampering)
+        await self.request()
         self.assertIn("VHL classification differs from the laboratory", self.blocked()[0].detail["error"])
         self.assertEqual(self.delivered(), [])
 
-    def test_history_from_summary(self):
-        self.assertEqual(history_from_summary({"conditions": ["RCC, post nephrectomy"]}), {"rcc": True})
-        self.assertEqual(history_from_summary({"conditions": [{"display": "Clear-cell carcinoma"}]}), {"rcc": True})
-        self.assertEqual(history_from_summary({"conditions": ["CKD G3a"]}), {"rcc": False})
-        self.assertEqual(history_from_summary(None), {"rcc": False})
+    def test_history_from_conditions(self):
+        self.assertEqual(history_from_conditions(["RCC, post nephrectomy"]), {"rcc": True})
+        self.assertEqual(history_from_conditions([{"display": "Malignant neoplasm of right kidney (clear-cell RCC)"}]),
+                         {"rcc": True})
+        self.assertEqual(history_from_conditions([{"display": "Chronic kidney disease, stage 3"}]), {"rcc": False})
+        self.assertEqual(history_from_conditions(None), {"rcc": False})
 
 
 if __name__ == "__main__":

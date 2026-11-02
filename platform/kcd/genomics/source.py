@@ -1,6 +1,7 @@
 """Panel sources for the Genomics Interpreter (surface "genomics"). Read-only.
 
-FolderPanelSource layout: <root>/<patient_id>/panel.json or <root>/<patient_id>/*.vcf.
+FolderPanelSource layout: <root>/<patient_id>/panel*.json or <root>/<patient_id>/*.vcf. Other files in the
+patient folder (a FHIR bundle, images) are ignored.
 A FHIR (MolecularSequence / Observation) source can replace it behind the same method.
 """
 from __future__ import annotations
@@ -28,7 +29,7 @@ class FolderPanelSource:
         d = (self.root / patient_id).resolve()
         if d.parent != self.root:
             raise PanelError(f"invalid patient id {patient_id!r}")
-        candidates = sorted(d.glob("*.json")) + sorted(d.glob("*.vcf")) if d.is_dir() else []
+        candidates = sorted(d.glob("panel*.json")) + sorted(d.glob("*.vcf")) if d.is_dir() else []
         if not candidates:
             raise NoPanel(f"no genetic panel on file for patient {patient_id}")
         panels = []

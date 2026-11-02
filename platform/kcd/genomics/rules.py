@@ -11,7 +11,8 @@ from pathlib import Path
 
 from kcd.genomics.panel import CLASSIFICATIONS, Panel, Variant
 
-RULES_PATH = Path(__file__).parent / "variant_rules.json"
+# Knowledge Model data lives at the repo root (owner: Person 4); see knowledge/README.md.
+RULES_PATH = Path(__file__).resolve().parents[3] / "knowledge" / "variant_rules.json"
 RELEVANCE_ORDER = ("high", "moderate", "review", "unknown", "low", "none", "filtered")
 DISCLOSURE = "Disclosure to the patient requires a geneticist (gate genetic_disclosure)."
 

@@ -2,7 +2,8 @@
 
 Used by this slice's tests and by `python -m kcd.demo`. It wires kcd_core exactly like the Core
 test fixture (tests/conftest.py at the repo root): registry, Ed25519 keys for every seat and one
-clinician, in-memory bus, Dispatcher with escalation, and a gate port that records opened gates.
+clinician, in-memory bus, Dispatcher with escalation and paging, and a Clinical Board stand-in that records
+the gates the Dispatcher opens (case packs) and the review items seats create (board.create_item).
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ class _Rota:
 
 
 @dataclass
-class _Pager:
+class RecordingPager:
     pages: list[tuple[str, str]] = field(default_factory=list)
 
     async def page(self, target: str, escalation: Escalation) -> None:
@@ -44,12 +45,20 @@ class _Pager:
 
 @dataclass
 class RecordingGates:
-    """Gate port: records the review items the Dispatcher opens (Clinical Board stand-in)."""
+    """Clinical Board stand-in. `opened`: case packs gated by the Dispatcher (GatePort, idempotent on
+    case id + version). `items`: review items seats put on the Board with board.create_item."""
 
     opened: list[tuple[Envelope, CasePackReady]] = field(default_factory=list)
+    items: list[dict[str, Any]] = field(default_factory=list)
 
     async def open_gate(self, env: Envelope, pack: CasePackReady) -> None:
-        self.opened.append((env, pack))
+        if not any(p.case_id == pack.case_id and p.version == pack.version for _, p in self.opened):
+            self.opened.append((env, pack))
+
+    def create_item(self, item: dict[str, Any]) -> str:
+        item_id = f"board_item_{len(self.items) + 1}"
+        self.items.append({"id": item_id, **item})
+        return item_id
 
 
 @dataclass
@@ -64,28 +73,29 @@ class Desk:
     clinician: Signer
     clinician_keys: KeyRing
     gates: RecordingGates
+    pager: RecordingPager
     dispatcher: Dispatcher
     runtimes: dict[str, SeatRuntime] = field(default_factory=dict)
 
     @classmethod
-    async def create(cls) -> Desk:
+    async def create(cls, start: datetime | None = None) -> Desk:
         catalog = PolicyCatalog.load(CATALOG_PATH)
         registry = ManifestRegistry.from_dir(catalog, MANIFEST_DIR)
-        clock, audit, bus = FakeClock(), InMemoryAudit(), InMemoryBus(max_attempts=3)
+        clock, audit, bus = FakeClock(start), InMemoryAudit(), InMemoryBus(max_attempts=3)
         signers = {s: Signer.generate(s) for s in registry.seats()}
         seat_keys = KeyRing()
         for s, signer in signers.items():
             seat_keys.add(s, signer.public_key)
         clinician = Signer.generate(CLINICIAN_ID)
         clinician_keys = KeyRing({CLINICIAN_ID: clinician.public_key})
-        gates = RecordingGates()
-        escalations = EscalationService(rota=_Rota(), pager=_Pager(), store=InMemoryEscalationStore(),
+        gates, pager = RecordingGates(), RecordingPager()
+        escalations = EscalationService(rota=_Rota(), pager=pager, store=InMemoryEscalationStore(),
                                         clock=clock, audit=audit)
         dispatcher = Dispatcher(bus=bus, registry=registry, seat_keys=seat_keys, audit=audit, clock=clock,
                                 escalations=escalations, gates=gates)
         await dispatcher.start()
         return cls(catalog, registry, clock, audit, bus, signers, seat_keys, clinician, clinician_keys, gates,
-                   dispatcher)
+                   pager, dispatcher)
 
     async def add_seat(self, seat: Seat, tools: dict[str, Any] | None = None, timeout_s: float = 10.0) -> SeatRuntime:
         rt = SeatRuntime(seat, registry=self.registry, catalog=self.catalog, signer=self.signers[seat.seat_id],

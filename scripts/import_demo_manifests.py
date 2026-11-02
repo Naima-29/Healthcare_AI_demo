@@ -67,6 +67,9 @@ OVERRIDES: dict[str, dict[str, list[str]]] = {
     # In the demo this refusal is added live by the Director (golden path step 1). In the real seed it is
     # there from day one: the Companion must never disclose an imaging result before review.
     "companion": {"refuses+": ["disclose_imaging_before_review"]},
+    # The variant rules depend on the patient's history (VHL + RCC history -> kidney-sparing options matter).
+    # Read-only access to conditions; requested by Person 3, see platform/kcd/README.md.
+    "genomics_interpreter": {"tools+": ["fhir.get_conditions"], "surfaces+": ["fhir"]},
 }
 
 

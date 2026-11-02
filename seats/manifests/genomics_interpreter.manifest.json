@@ -17,11 +17,13 @@
   "tools": [
     "genomics.get_panel",
     "km.interpret_variant",
-    "a2a.send"
+    "a2a.send",
+    "fhir.get_conditions"
   ],
   "surfaces": [
     "genomics",
-    "km"
+    "km",
+    "fhir"
   ],
   "memory": {
     "read": [

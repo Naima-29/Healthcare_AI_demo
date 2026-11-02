@@ -287,18 +287,17 @@ class CoreMemoryTest(unittest.TestCase):
         self.archivist = CoreMemory(self.c, pep_for("archivist"), "archivist", "p1")
 
     def test_layer_scopes_from_manifest(self):
-        ev = self.imaging.append_evidence(kind="ct", content={})              # L1 write: allowed
+        ev = self.imaging.append_evidence(kind="ct", content={})              # patient layer write: allowed
         self.assertEqual(self.c.get_evidence(3, "p1", ev["id"])["source"], "seat:imaging_reader")
         with self.assertRaises(PolicyViolation):
-            self.imaging.propose_patient_rule(key="k", value=1, source="s", evidence_ids=[ev["id"]])  # L2 write
+            self.imaging.propose_patient_rule(key="k", value=1, source="s", evidence_ids=[ev["id"]])  # no tool
         with self.assertRaises(PolicyViolation):
-            self.imaging.patient_rules()                                      # L2 read
+            self.imaging.append_hospital_evidence(kind="x", content={})       # hospital layer: not granted
         with self.assertRaises(PolicyViolation):
-            self.imaging.append_hospital_evidence(kind="x", content={})       # L3 write
-        with self.assertRaises(PolicyViolation):
-            self.imaging.active_rules()
+            self.imaging.active_rules()                                       # reads the hospital layer
         self.archivist.append_hospital_evidence(kind="x", content={})
         self.assertEqual(len(self.c.list_evidence(2, "hospital")), 1)
+        self.assertEqual(len(self.c.list_knowledge(3, "p1")), 0)
 
     def test_layers_map_to_cortex_partitions(self):
         ev = self.archivist.append_evidence(kind="decision", content={"a": 1})

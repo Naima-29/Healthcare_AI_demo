@@ -8,6 +8,8 @@ Safety rules are enforced in code, never only in a prompt.
 - Architecture and roadmap: [ENGINEERING_PLAN.md](ENGINEERING_PLAN.md)
 - Core runtime internals and the seat-author guide: [core/README.md](core/README.md)
 - Andrea's v2 demo (read-only reference, the source of our vocabulary): [demo/README.md](demo/README.md)
+- `dev` integration of all branches, discrepancies and how to run the golden path: [INTEGRATION.md](INTEGRATION.md)
+- The seats built on Core and the Python golden-path demo: [platform/kcd/README.md](platform/kcd/README.md)
 
 > Research prototype. Synthetic or sandbox data only, until clinical validation and regulatory review are done.
 
@@ -17,9 +19,9 @@ Safety rules are enforced in code, never only in a prompt.
 |---|---|
 | 1. Core (Harith) | Contracts, seat runtime + policy enforcement, signed messages, Dispatcher + escalation, Chief of Staff, MCP connector template |
 | 2. Patient side (Meet) | Companion: Telegram, interview, emotion signals, red flags, safety script, wearables |
-| 3. Evidence (Chrislin, Naima) | Imaging Reader, Genomics Interpreter, Cortex memory, Archivist |
+| 3. Evidence + Database (Naima) | Imaging Reader, Genomics Interpreter, Cortex memory, Archivist |
 | 4. Clinical reasoning (Diana) | Renal Guardian, Safety Verifier, Knowledge Model |
-| 5. Doctor and memory (Naima) | Case Briefer, Clinical Board, Memory panel, CT model training + heat map |
+| 5. Doctor and memory (Chrislin) | Case Briefer, Clinical Board, Memory panel, CT model training + heat map |
 
 Everyone builds on Core: you write a seat against the contracts in `core/kcd_core/contracts`, and the runtime
 handles signing, routing, policy checks and audit for you.

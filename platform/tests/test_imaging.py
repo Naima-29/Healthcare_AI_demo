@@ -347,10 +347,15 @@ class ReaderTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((env.type, env.from_, env.to),
                          (MessageType.IMAGING_SIGNAL, "imaging_reader", "safety_verifier"))
         sig = ImagingSignal.model_validate(env.payload)  # Core's frozen contract
-        self.assertEqual((sig.label, sig.quality, sig.study_uid), ("tumor", "ok", "1.2.3"))
+        self.assertEqual((sig.label, sig.provenance.study_uid, sig.provenance.model), ("tumor", "1.2.3", "stub-fixed"))
+        self.assertEqual((sig.quality.quality, sig.quality.in_distribution, sig.quality.issues), ("adequate", True, []))
+        self.assertFalse(sig.provenance.live_model)  # the stub model says so
         self.assertLess(sig.p_calibrated, sig.p_raw)  # T = 2 softens 0.90
         self.assertTrue(sig.heatmap_ref.startswith("cortex:evidence/"))
-        self.assertIn(r.details_evidence_id, sig.technical_note)
+        self.assertTrue(sig.key_image.startswith("cortex:evidence/"))
+        self.assertIn(r.details_evidence_id, sig.note)
+        self.assertEqual(sig.calibration, "temperature scaling T=2.0 (calibrated)")
+        self.assertTrue(all(isinstance(v, float) for v in sig.cam_metrics.values()))
         self.assertAlmostEqual(sum(r.details["probabilities"].values()), 1.0, places=3)
         self.assertEqual(self.desk.bus.dead_letters, [])
         kinds = [e["kind"] for e in self.cortex.list_evidence(3, "pt_marco")]
@@ -369,15 +374,17 @@ class ReaderTest(unittest.IsolatedAsyncioTestCase):
         seat, ctx = await self.reader(FixedCtModel({"normal": 0.3, "cyst": 0.25, "stone": 0.25, "tumor": 0.2}))
         r = await self.process(seat, ctx)
         self.assertEqual(r.status, "out_of_distribution")
-        self.assertEqual(ImagingSignal.model_validate(self.signals()[0].payload).quality, "out_of_distribution")
+        quality = ImagingSignal.model_validate(self.signals()[0].payload).quality
+        self.assertFalse(quality.in_distribution)
+        self.assertGreater(quality.ood_score, 0.85)
 
     async def test_poor_image_gives_low_quality_signal(self):
         write_study(self.root, "pt_anna", "7.7", png_bytes(np.full((64, 64), 120, np.uint8)))
         seat, ctx = await self.reader()
         r = await self.process(seat, ctx, patient="pt_anna")
-        self.assertEqual((r.status, r.sent), ("low", True))
-        failed = {c["name"] for c in r.details["quality_checks"] if not c["ok"]}
-        self.assertEqual(failed, {"min_side_px", "contrast_std"})
+        self.assertEqual((r.status, r.sent), ("limited", True))
+        quality = ImagingSignal.model_validate(self.signals()[0].payload).quality
+        self.assertEqual((quality.quality, set(quality.issues)), ("limited", {"min_side_px", "contrast_std"}))
 
     async def test_unreadable_image_is_loud_not_silent(self):
         write_study(self.root, "pt_anna", "9.9", b"garbage")
@@ -433,25 +440,29 @@ class ReaderTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_policy(self):
         seat, ctx = await self.reader()
-        for tool, refusal in (("pacs.write_study", "no_image_alteration"),
-                              ("channel.send_message", "no_patient_contact")):
+        for action, refusal in (("pacs.write", "alter_image"), ("patient.send", "report_to_patient"),
+                                ("imaging.label_diagnosis", "label_as_diagnosis")):
             with self.assertRaises(PolicyViolation) as cm:
-                ctx.pep.check_tool(tool)
+                ctx.act(action)
             self.assertEqual(cm.exception.refusal, refusal)
+        with self.assertRaises(PolicyViolation):
+            ctx.pep.check_tool("channel.send")  # not in the manifest, and it performs patient.send
         with self.assertRaises(PolicyViolation) as cm:
-            ctx.guard_content("diagnosis")  # a diagnosis needs a clinician release
-        self.assertEqual(cm.exception.refusal, "no_diagnosis")
+            ctx.guard_content("diagnosis_claim")  # a diagnosis needs a clinician release
+        self.assertEqual(cm.exception.refusal, "label_as_diagnosis")
         with self.assertRaises(PolicyViolation):
             ctx.pep.check_emit(MessageType.IMAGING_SIGNAL, "case_briefer")  # only via the Safety Verifier
         with self.assertRaises(PolicyViolation):
-            ctx.check_memory("L2", "read")
+            ctx.check_memory(2, "read")  # the hospital layer
+        with self.assertRaises(PolicyViolation):
+            ctx.check_memory(1, "write")  # licensed knowledge is read-only
         self.assertFalse(any(hasattr(FolderPacs, m) for m in ("write", "store", "put", "delete")))
 
     async def test_policy_violation_from_a_tool_is_not_swallowed_as_model_error(self):
         seat, ctx = await self.reader()
         registry = self.desk.registry
         without_model = registry.get("imaging_reader").model_copy(
-            update={"tools": ["pacs.list_studies", "pacs.fetch_study"]})
+            update={"tools": ["pacs.list_studies", "pacs.fetch_study", "ct.quality_ood_check"]})
         registry.activate(without_model)  # hot reload: ct.classify is no longer allowed
         with self.assertRaises(PolicyViolation):
             await self.process(seat, ctx)

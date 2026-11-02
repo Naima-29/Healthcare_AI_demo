@@ -1,24 +1,28 @@
-name: evidence-database
+name: desk
 
 on:
   push:
-    paths: ["platform/**", "core/**", "contracts/**", "seats/**", ".github/workflows/evals.yml"]
+    paths: ["platform/**", "core/**", "contracts/**", "seats/**", "knowledge/**", "demo/**", ".github/workflows/evals.yml"]
   pull_request:
-    paths: ["platform/**", "core/**", "contracts/**", "seats/**", ".github/workflows/evals.yml"]
+    paths: ["platform/**", "core/**", "contracts/**", "seats/**", "knowledge/**", "demo/**", ".github/workflows/evals.yml"]
 
 jobs:
-  platform:
+  seats:
+    name: seats + golden path (Python, on kcd_core)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install kcd_core and the slice dependencies
+      - name: Install kcd_core and the seats' dependencies
         run: pip install -e . "numpy>=1.26" "pillow>=10.0" "sqlalchemy>=2.0" pytest
-      - name: Slice tests (on kcd_core)
+      - name: Seat tests
         working-directory: platform
         run: python -W error -m pytest -q -p no:asyncio
+      - name: Golden path demo
+        working-directory: platform
+        run: python -m kcd.demo
       - name: Validate datasets
         working-directory: platform
         run: |
@@ -32,10 +36,21 @@ jobs:
       - name: Genomics rules
         working-directory: platform
         run: python -m evals run genomics_relevance --target genomics_rules --gate
-      - name: Demo runs end to end
-        working-directory: platform
-        run: python -m kcd.demo
       - uses: actions/upload-artifact@v4
         with:
           name: eval-reports
           path: platform/reports/
+
+  stage-demo:
+    name: stage demo (Node)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo/kidney-care-desk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Demo tests (incl. Knowledge Model and Safety Verifier tests)
+        run: node --test --test-concurrency=1 tests/unit.test.mjs tests/e2e.test.mjs tests/seats.test.mjs tests/seats-behavior.test.mjs
