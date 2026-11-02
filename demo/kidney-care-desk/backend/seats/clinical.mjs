@@ -109,7 +109,7 @@ export class SafetyVerifier extends Seat {
 
   async onMessage(msg) {
     if (!['imaging_signal', 'therapy_conflict'].includes(msg.type) || msg.payload.verification) return;
-    const checks = msg.type === 'imaging_signal' ? this.checkImaging(msg.payload) : this.checkConflict(msg.payload);
+    const checks = msg.type === 'imaging_signal' ? this.checkImaging(msg.payload) : await this.checkConflict(msg.payload);
     const passed = checks.every((c) => c.ok);
     this.meter(checks.length / 100);
     hub.publish('verification', { type: msg.type, passed, checks });
@@ -131,11 +131,20 @@ export class SafetyVerifier extends Seat {
       { check: 'no diagnosis claim in the note', ok: !classify(p.note || '').includes('diagnosis_claim') },
     ];
   }
-  checkConflict(p) {
+  
+    async checkConflict(p) {
     const f = p.data_freshness || {};
     const age = f.date ? (config.now() - new Date(f.date)) / 86400000 : Infinity;
+    const cited = Array.isArray(p.citations) ? p.citations : [];
+    // Each citation must match a source in the Knowledge Model exactly.
+    // (km.query matches partial text, so we compare the full citation ourselves.)
+    const inKnowledgeModel = await Promise.all(cited.map(async (c) => {
+      const hits = await this.tool('km.query', { term: c });
+      return hits.some((h) => h.citation === c);
+    }));
     return [
-      { check: 'every claim cited to the Knowledge Model', ok: Array.isArray(p.citations) && p.citations.length > 0 },
+      { check: 'every claim cited to the Knowledge Model', ok: cited.length > 0 },
+      { check: 'every citation exists in the Knowledge Model', ok: inKnowledgeModel.every(Boolean) },
       { check: 'eGFR plausible (1-150)', ok: f.egfr > 1 && f.egfr < 150 },
       { check: `kidney function data fresh (<= ${config.staleDays} days)`, ok: age <= config.staleDays },
     ];
