@@ -26,6 +26,33 @@ python -m kcd.scenarios.edge_cases                  # every edge case for one pa
 cd ../demo/kidney-care-desk && npm start            # the Node stage demo (UI), http://localhost:5173
 ```
 
+### In the browser
+
+```bash
+pip install fastapi uvicorn                         # plus the install above
+cd platform
+python -m kcd.web                                   # http://127.0.0.1:8000
+```
+
+`platform/kcd/web/` serves the stage UI (a copy of the demo's frontend, extended; `demo/` is untouched) on the real
+seats. What works from the screen:
+
+- **Golden path**: Autoplay or each of the 7 steps, with Marco R.
+- **Patient**: type on the phone or use the quick lines; send a lab photo. Choose Marco R. or Sofia B. at the top.
+- **Clinicians**: acknowledge, review the CT, edit and sign the decision, confirm or reject rules. Each signature is a
+  real Ed25519 release. A case pack with a CT can't be signed before a radiologist reviews it.
+- **Director**: real Chief of Staff compiler; rules hot-reload and are enforced by the PEP. A new seat stays in shadow.
+- **CT studies**: read any study (Sofia's 11 edge cases), or upload an image. Switch the CT model at the top: the stub
+  answers only for its own studies, Chrislin's model reads anything (it needs her weights in `models/kidney_project`
+  and the `ct-model` extras in `platform/pyproject.toml`; about 25 s per slice on a CPU).
+- **Edge cases**: runs the 52 checks (57 with the real model) and shows them as a table.
+- **Memory**: Cortex evidence and rules per patient, and erasing a patient.
+
+Still stand-ins, and labelled so on screen: the Companion's words (keyword reading, scripted interview; the camera
+and microphone presets are not a real camera or microphone) and the Case Briefer's SBAR. Telegram, FHIR and PACS
+servers are not connected: the data comes from the fixtures folders. It is a local demo: no login, the server holds
+every clinician's signing key, it answers on this computer only, and all data is in memory until restart or Reset.
+
 The Python golden path runs on kcd_core with real seats: Dispatcher + escalation (Core), Renal Guardian +
 Safety Verifier + Knowledge Model (Diana's rules), Imaging Reader + Genomics Interpreter + Archivist + Cortex
 (Naima). 15 messages, all signed, routed and policy-checked; no dead letters; the clinician signs the case pack

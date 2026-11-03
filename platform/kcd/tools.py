@@ -25,6 +25,7 @@ reclassify_variants also block those actions in the catalogue).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from typing import Any
@@ -55,7 +56,8 @@ def imaging_tools(pacs: PacsSource, model: CtModel,
         return check_image(load_image(image_bytes), thresholds)
 
     async def classify(image_bytes: bytes, media_type: str) -> Any:
-        return model.predict(load_image(image_bytes), image_bytes, media_type)
+        # In a worker thread: a real model takes seconds per slice and must not stall the bus.
+        return await asyncio.to_thread(model.predict, load_image(image_bytes), image_bytes, media_type)
 
     return {"pacs.list_studies": list_studies, "pacs.fetch_study": fetch_study,
             "ct.quality_ood_check": quality_ood_check, "ct.classify": classify}
