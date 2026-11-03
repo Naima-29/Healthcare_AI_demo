@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.08",
+  "modality": "CT",
+  "acquired": "2026-07-10T09:00:00Z",
+  "description": "Synthetic: corrupt file (upload cut off)",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}

@@ -23,6 +23,9 @@ jobs:
       - name: Golden path demo
         working-directory: platform
         run: python -m kcd.demo
+      - name: Edge cases (Sofia B., expected vs actual)
+        working-directory: platform
+        run: python -m kcd.scenarios.edge_cases
       - name: Validate datasets
         working-directory: platform
         run: |
