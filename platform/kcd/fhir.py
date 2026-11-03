@@ -34,6 +34,15 @@ class FolderFhir:
         return [e["resource"] for e in bundle.get("entry", [])
                 if e.get("resource", {}).get("resourceType") == resource_type]
 
+    def patient(self, patient_id: str) -> dict[str, Any]:
+        rows = self._resources(patient_id, "Patient")
+        if not rows:
+            raise FhirError(f"no Patient resource for {patient_id}")
+        p = rows[0]
+        name = (p.get("name") or [{}])[0]
+        return {"id": p.get("id"), "name": " ".join([*name.get("given", []), name.get("family", "")]).strip(),
+                "gender": p.get("gender"), "birthDate": p.get("birthDate")}
+
     def conditions(self, patient_id: str) -> list[dict[str, Any]]:
         out = []
         for c in self._resources(patient_id, "Condition"):
