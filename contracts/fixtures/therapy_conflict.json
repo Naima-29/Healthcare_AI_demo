@@ -1,0 +1,62 @@
+{
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
+  "valid": [
+    {
+      "drug": "NSAID (ibuprofen)",
+      "conditions": [
+        "CKD G3a (eGFR 52)",
+        "hypertension (home SBP ~148 mmHg)",
+        "TKI therapy (hypertension, proteinuria)"
+      ],
+      "severity": "high",
+      "rationale": "NSAIDs reduce renal perfusion and raise blood pressure; prolonged use is to be avoided in CKD, particularly with eGFR < 60 and uncontrolled hypertension.",
+      "citations": [
+        "[14] KDIGO 2024 CKD Guideline, Kidney Int 2024;105(4S):S117-S314"
+      ],
+      "data_freshness": {
+        "egfr": 52,
+        "creatinine": 1.41,
+        "date": "2026-10-08",
+        "source": "patient photo (on-device OCR)",
+        "stage": "G3a",
+        "home_sbp_7d": 148
+      },
+      "egfr_series": [
+        {
+          "date": "2026-10-08",
+          "value": 52
+        },
+        {
+          "date": "2026-06-12",
+          "value": 58
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "drug": "x",
+      "conditions": [
+        "c"
+      ],
+      "severity": "high",
+      "rationale": "r",
+      "citations": []
+    },
+    {
+      "drug": "x",
+      "conditions": [
+        "c"
+      ],
+      "severity": "high",
+      "rationale": "r",
+      "citations": [
+        "[14] KDIGO"
+      ],
+      "verification": {
+        "passed": true,
+        "by": "safety_verifier"
+      }
+    }
+  ]
+}

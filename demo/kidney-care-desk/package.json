@@ -1,0 +1,16 @@
+{
+  "name": "kidney-care-desk",
+  "version": "2.0.0",
+  "description": "Loop AI Labs - Kidney Care Desk (v2 demo): clinical seats compiled from natural-language job descriptions, typed & signed A2A, MCP connectors, Loop Cortex memory, human gates enforced at runtime.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node backend/server.mjs",
+    "dev": "node --watch backend/server.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "demo:cli": "node scripts/run-golden-path.mjs",
+    "mcp": "node bin/mcp-stdio.mjs"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "RequestedItem": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "lab",
+            "imaging",
+            "vitals",
+            "genomics"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_age_days": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Age Days"
+        }
+      },
+      "required": [
+        "kind",
+        "code"
+      ],
+      "title": "RequestedItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ask_patient": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Set when the patient should be asked (routes to Companion)",
+      "title": "Ask Patient"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/RequestedItem"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "what": {
+      "title": "What",
+      "type": "string"
+    },
+    "why": {
+      "title": "Why",
+      "type": "string"
+    }
+  },
+  "required": [
+    "what",
+    "why"
+  ],
+  "title": "DataRequest",
+  "type": "object"
+}

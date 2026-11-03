@@ -1,0 +1,77 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "class": {
+      "description": "Drug class used by the conflict rules, e.g. 'NSAID'",
+      "title": "Class",
+      "type": "string"
+    },
+    "dose_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dose Text"
+    },
+    "drug": {
+      "title": "Drug",
+      "type": "string"
+    },
+    "frequency": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frequency"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "rxnorm": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rxnorm"
+    },
+    "source": {
+      "default": "patient_reported",
+      "enum": [
+        "patient_reported",
+        "fhir"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "drug",
+    "class"
+  ],
+  "title": "MedicationReport",
+  "type": "object"
+}

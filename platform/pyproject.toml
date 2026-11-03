@@ -1,0 +1,25 @@
+[project]
+name = "kcd-platform"
+version = "0.2.0"
+description = "Kidney Care Desk (Loop AI Labs): Evidence + Database slice on kcd_core, and the evaluation harness."
+requires-python = ">=3.11"
+dependencies = [
+    "kcd-core",                 # the repo root package (core/kcd_core)
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+dicom = ["pydicom>=2.4"]
+postgres = ["psycopg[binary]>=3.1"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.ruff]
+extend = "../pyproject.toml"    # same lint rules as Core
+
+[tool.pytest.ini_options]
+pythonpath = [".", "../core"]
+testpaths = ["tests"]

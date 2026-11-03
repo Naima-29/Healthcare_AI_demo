@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "message",
+            "observation",
+            "study",
+            "document",
+            "variant",
+            "series",
+            "evidence"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "citations": {
+      "items": {
+        "description": "Knowledge Model citation, e.g. '[14] KDIGO 2024 ...'",
+        "minLength": 3,
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Citations",
+      "type": "array"
+    },
+    "conditions": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Conditions",
+      "type": "array"
+    },
+    "data_freshness": {
+      "additionalProperties": true,
+      "title": "Data Freshness",
+      "type": "object"
+    },
+    "drug": {
+      "title": "Drug",
+      "type": "string"
+    },
+    "egfr_series": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Egfr Series",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceRef"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "options": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Options",
+      "type": "array"
+    },
+    "rationale": {
+      "title": "Rationale",
+      "type": "string"
+    },
+    "rule_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rule Id"
+    },
+    "severity": {
+      "enum": [
+        "high",
+        "moderate",
+        "low"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "drug",
+    "conditions",
+    "severity",
+    "rationale",
+    "citations"
+  ],
+  "title": "TherapyConflict",
+  "type": "object"
+}

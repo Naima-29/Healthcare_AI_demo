@@ -1,0 +1,217 @@
+{
+  "$defs": {
+    "ImageQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "in_distribution": {
+          "title": "In Distribution",
+          "type": "boolean"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "ood_score": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ood Score"
+        },
+        "quality": {
+          "enum": [
+            "adequate",
+            "limited"
+          ],
+          "title": "Quality",
+          "type": "string"
+        }
+      },
+      "required": [
+        "quality",
+        "in_distribution"
+      ],
+      "title": "ImageQuality",
+      "type": "object"
+    },
+    "ImagingProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "acquired": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acquired"
+        },
+        "live_model": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Live Model"
+        },
+        "modality": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modality"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "study_uid": {
+          "title": "Study Uid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "study_uid",
+        "model"
+      ],
+      "title": "ImagingProvenance",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "calibration": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Calibration"
+    },
+    "cam_metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Cam Metrics",
+      "type": "object"
+    },
+    "heatmap_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Heatmap Ref"
+    },
+    "key_image": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Image"
+    },
+    "label": {
+      "enum": [
+        "normal",
+        "cyst",
+        "tumor",
+        "stone"
+      ],
+      "title": "Label",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Technical note for the radiologist; never a diagnosis",
+      "title": "Note"
+    },
+    "p_calibrated": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "P Calibrated",
+      "type": "number"
+    },
+    "p_raw": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "P Raw"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ImagingProvenance"
+    },
+    "quality": {
+      "$ref": "#/$defs/ImageQuality"
+    }
+  },
+  "required": [
+    "label",
+    "p_calibrated",
+    "quality",
+    "provenance"
+  ],
+  "title": "ImagingSignal",
+  "type": "object"
+}

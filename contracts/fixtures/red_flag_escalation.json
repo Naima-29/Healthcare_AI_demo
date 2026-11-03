@@ -1,0 +1,45 @@
+{
+  "source": "demo golden path (backend/seats, backend/knowledge/km.mjs, data/marco-r)",
+  "valid": [
+    {
+      "urgency": "high",
+      "pattern": "RCC follow-up + visible haematuria + severe flank pain + systemic signs",
+      "evidence": [
+        "visible blood in urine",
+        "severe one-sided flank pain (8/10)",
+        "known RCC / post-nephrectomy follow-up"
+      ],
+      "safety_script_sent": true
+    },
+    {
+      "urgency": "high",
+      "pattern": "RCC follow-up + visible haematuria + severe flank pain + systemic signs",
+      "evidence": [
+        "visible blood in urine"
+      ],
+      "safety_script_sent": true,
+      "unit": "uro_oncology",
+      "flags": [
+        {
+          "code": "visible_hematuria",
+          "detected_by": "both",
+          "rule_id": "RF-RCC-01"
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "urgency": "critical",
+      "pattern": "p",
+      "evidence": [
+        "e"
+      ]
+    },
+    {
+      "urgency": "high",
+      "pattern": "p",
+      "evidence": []
+    }
+  ]
+}

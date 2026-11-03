@@ -1,0 +1,139 @@
+{
+  "$defs": {
+    "Gate": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "signer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Role that must sign; null means no human gate",
+          "title": "Signer"
+        }
+      },
+      "required": [
+        "label",
+        "signer"
+      ],
+      "title": "Gate",
+      "type": "object"
+    },
+    "Refusal": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "content": {
+          "description": "Content classes allowed only with a valid release",
+          "items": {
+            "type": "string"
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "Refusal",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "content_classes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Content Classes",
+      "type": "array"
+    },
+    "gates": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Gate"
+      },
+      "title": "Gates",
+      "type": "object"
+    },
+    "internal_tools": {
+      "description": "Runtime tools with no MCP surface",
+      "items": {
+        "type": "string"
+      },
+      "title": "Internal Tools",
+      "type": "array"
+    },
+    "refusals": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Refusal"
+      },
+      "title": "Refusals",
+      "type": "object"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
+    },
+    "surfaces": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "MCP server -> its tools",
+      "title": "Surfaces",
+      "type": "object"
+    },
+    "tool_actions": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "Tool -> actions it performs",
+      "title": "Tool Actions",
+      "type": "object"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "refusals",
+    "content_classes",
+    "gates",
+    "surfaces"
+  ],
+  "title": "PolicyCatalog",
+  "type": "object"
+}

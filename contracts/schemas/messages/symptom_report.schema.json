@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "Distress": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "default": null,
+          "description": "Facial features (e.g. PSPI) behind the score",
+          "title": "Face"
+        },
+        "level": {
+          "enum": [
+            "low",
+            "moderate",
+            "high"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "verbal": {
+          "default": null,
+          "title": "Verbal"
+        },
+        "voice": {
+          "default": null,
+          "title": "Voice"
+        }
+      },
+      "required": [
+        "score",
+        "level"
+      ],
+      "title": "Distress",
+      "type": "object"
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "message",
+            "observation",
+            "study",
+            "document",
+            "variant",
+            "series",
+            "evidence"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    },
+    "Symptom": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "onset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Onset"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Patient wording that produced this finding",
+          "title": "Source Text"
+        }
+      },
+      "required": [
+        "code",
+        "label"
+      ],
+      "title": "Symptom",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "channel": {
+      "anyOf": [
+        {
+          "enum": [
+            "telegram",
+            "whatsapp",
+            "app"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Channel"
+    },
+    "distress": {
+      "$ref": "#/$defs/Distress"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceRef"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "symptoms": {
+      "items": {
+        "$ref": "#/$defs/Symptom"
+      },
+      "minItems": 1,
+      "title": "Symptoms",
+      "type": "array"
+    },
+    "transcript": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transcript"
+    },
+    "underreporting": {
+      "default": false,
+      "title": "Underreporting",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "symptoms",
+    "distress"
+  ],
+  "title": "SymptomReport",
+  "type": "object"
+}

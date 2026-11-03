@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "DecisionItem": {
+      "additionalProperties": false,
+      "properties": {
+        "clinician_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clinician Text"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "patient_text": {
+          "description": "Exactly what the Companion may tell the patient, as signed",
+          "title": "Patient Text",
+          "type": "string"
+        },
+        "patient_text_en": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Patient Text En"
+        }
+      },
+      "required": [
+        "code",
+        "patient_text"
+      ],
+      "title": "DecisionItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifact_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Artifact Hash",
+      "type": "string"
+    },
+    "case_id": {
+      "title": "Case Id",
+      "type": "string"
+    },
+    "decision_id": {
+      "description": "Id of the signed release",
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/DecisionItem"
+      },
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "signature": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signature"
+    },
+    "signed_by": {
+      "title": "Signed By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "case_id",
+    "decision_id",
+    "artifact_hash",
+    "signed_by",
+    "items"
+  ],
+  "title": "ClinicianDecision",
+  "type": "object"
+}
