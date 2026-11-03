@@ -199,6 +199,14 @@ class ModelAdapterTest(unittest.TestCase):
             CallableCtModel("no_colon_here")
         self.assertIsNotNone(CallableCtModel("tests.helpers:synthetic_ct").fn)
 
+    def test_caveats_and_warnings(self):
+        base = {"model_version": "m", "labels": list(CT_LABELS), "logits": [0, 0, 0, 1]}
+        p = prediction_from_dict({**base, "caveats": ["Tumour recall 0.80.", " "], "warnings": ["models disagree"]})
+        self.assertEqual((p.caveats, p.warnings), (("Tumour recall 0.80.",), ("models disagree",)))
+        self.assertEqual(prediction_from_dict(base).caveats, ())
+        with self.assertRaises(CtModelError):
+            prediction_from_dict({**base, "caveats": "not a list"})
+
     def test_fixed_model_is_always_labelled_stub(self):
         self.assertIn("stub", FixedCtModel(TUMOR, model_version="v1").model_version)
 
@@ -362,6 +370,19 @@ class ReaderTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kinds, ["ct_key_image", "ct_heatmap_overlay", "imaging_signal_details"])
         self.assertTrue(self.cortex.verify_chain(3, "pt_marco")["ok"])
         self.assertTrue(self.desk.audit.verify_chain())
+
+    async def test_model_caveats_reach_the_technical_note(self):
+        def model(gray):
+            return {"model_version": "m", "labels": list(CT_LABELS), "probs": [0.02, 0.02, 0.02, 0.94],
+                    "caveats": ["Tumour recall 0.80 on 6 patient groups."], "warnings": ["fold models disagree"]}
+
+        seat, ctx = await self.reader(CallableCtModel(model))
+        r = await self.process(seat, ctx)
+        sig = ImagingSignal.model_validate(self.signals()[0].payload)
+        self.assertIn("Model caveats: Tumour recall 0.80 on 6 patient groups.", sig.note)
+        self.assertIn("This image: fold models disagree.", sig.note)
+        self.assertTrue(sig.provenance.live_model)
+        self.assertEqual(r.details["model_caveats"], ["Tumour recall 0.80 on 6 patient groups."])
 
     async def test_original_image_is_stored_unaltered(self):
         seat, ctx = await self.reader()

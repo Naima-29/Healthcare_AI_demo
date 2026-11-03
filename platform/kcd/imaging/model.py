@@ -8,7 +8,9 @@ Expected dictionary (contract C4, see platform/kcd/README.md):
   {"model_version": "kidney-ct-cls 1.0",
    "labels": ["Normal", "Cyst", "Stone", "Tumor"],     # any order, each class once
    "logits": [...]  or  "probs": [...],                # same order as labels
-   "heatmap": [[...], ...]  or  "heatmap_png_b64": "..."  (optional, Grad-CAM)}
+   "heatmap": [[...], ...]  or  "heatmap_png_b64": "..."  (optional, Grad-CAM),
+   "caveats": ["..."],     # optional: the model card's limits, added to the radiologist's note
+   "warnings": ["..."]}    # optional: notes about this image (for example, fold models disagree)
 """
 from __future__ import annotations
 
@@ -44,6 +46,8 @@ class CtPrediction:
     heatmap: np.ndarray | None    # 2-D, any resolution, or None
     model_version: str
     output_kind: str              # "logits" or "probs" (what the model actually returned)
+    caveats: tuple[str, ...] = ()   # model-level limits (model card)
+    warnings: tuple[str, ...] = ()  # about this image
 
 
 class CtModel(Protocol):
@@ -76,7 +80,17 @@ def prediction_from_dict(d: Any) -> CtPrediction:
             raise CtModelError("probs must be in [0, 1] and sum to 1")
         arr = logits_from_probs(arr)
     order = [canon.index(label) for label in CT_LABELS]
-    return CtPrediction(logits=arr[order], heatmap=_heatmap(d), model_version=version.strip(), output_kind=kind)
+    return CtPrediction(logits=arr[order], heatmap=_heatmap(d), model_version=version.strip(), output_kind=kind,
+                        caveats=_strings(d, "caveats"), warnings=_strings(d, "warnings"))
+
+
+def _strings(d: dict, key: str) -> tuple[str, ...]:
+    v = d.get(key)
+    if v is None:
+        return ()
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        raise CtModelError(f"'{key}' must be a list of strings")
+    return tuple(x.strip() for x in v if x.strip())
 
 
 def _heatmap(d: dict) -> np.ndarray | None:
