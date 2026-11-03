@@ -18,10 +18,11 @@ clearly marked stand-ins for those two seats (`platform/kcd/standins.py`) and th
 
 ```bash
 pip install -e . numpy pillow sqlalchemy pytest     # or: uv sync, then pip install numpy pillow sqlalchemy
-pytest -q                                           # Core: 116 tests
+pytest -q                                           # Core: 117 tests
 cd platform
-python -m pytest -q -p no:asyncio                   # seats, Cortex, Knowledge Model, golden path: 123 tests
+python -m pytest -q -p no:asyncio                   # seats, Cortex, Knowledge Model, golden path, edge cases
 python -m kcd.demo                                  # the golden path, deck slide 28, steps 1 to 8
+python -m kcd.scenarios.edge_cases                  # every edge case for one patient (Sofia B.): 52 checks
 cd ../demo/kidney-care-desk && npm start            # the Node stage demo (UI), http://localhost:5173
 ```
 
@@ -47,6 +48,7 @@ and confirms the trial rules with Ed25519 releases.
 | 11 | "NSAIDs" (plural) is not recognised as an NSAID: the names list has only the singular (same in Node and Python) | Left as is; a test documents it | Diana |
 | 12 | Ownership table in the root README differed from the team doc (Person 3 / Person 5 swapped) | Table aligned with the team doc | Harith |
 | 13 | The panel source read every `.json` in the patient folder, so a FHIR bundle next to the panel broke it | Fixed: only `panel*.json` and `*.vcf` | Naima |
+| 14 | One red flag sent to two seats (the Companion's route: Case Briefer + Archivist) opened two escalations and paged the on-call doctor twice (found by the edge-case scenario) | Fixed in `core/kcd_core/dispatcher.py`: one escalation per sender + episode + red flag, whatever the receiver; regression test in `tests/test_dispatcher.py` | Harith |
 
 ## Not done yet
 

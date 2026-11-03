@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.04",
+  "modality": "CT",
+  "acquired": "2026-10-11T18:20:00Z",
+  "description": "Synthetic: renal mass (follow-up CT)",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}
