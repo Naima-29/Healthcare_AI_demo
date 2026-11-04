@@ -5,11 +5,9 @@
     python -m kcd.demo --ct-model-url http://localhost:9000/classify --calibration cal.json
     python -m kcd.demo --ct-model-callable chrislin_model.serve:predict
 
-Real seats: Dispatcher + escalation (Core), Renal Guardian + Safety Verifier + Knowledge Model (Diana's rules),
-Imaging Reader + Genomics Interpreter + Archivist + Cortex (Naima). Scripted stand-ins until their branches land:
-Companion (Meet) and Case Briefer (Chrislin), see kcd/standins.py. Every message is signed, routed by the
-Dispatcher and checked against the manifests and the policy catalogue.
-"""
+Real seats: Dispatcher + escalation (Core), Companion (Meet), Renal Guardian + Safety Verifier + Knowledge Model
+(Diana's rules), Imaging Reader + Genomics Interpreter + Archivist + Cortex (Naima). Case Briefer remains a scripted
+stand-in for Chrislin. Every message is signed, routed and checked against the manifests and policy catalogue."""
 
 from __future__ import annotations
 
@@ -34,12 +32,14 @@ from kcd.imaging.calibration import Calibration
 from kcd.imaging.model import CallableCtModel, CtModel, FixedCtModel, HttpCtModel
 from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
+from kcd.patient.channel import PatientChannel
 from kcd.seats.archivist import Archivist
+from kcd.seats.companion import Companion, companion_tools
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.seats.safety_verifier import SafetyVerifier
-from kcd.standins import StandInCaseBriefer, StandInCompanion
+from kcd.standins import StandInCaseBriefer
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "marco-r"
@@ -81,13 +81,17 @@ async def run(model: CtModel, calibration: Calibration | None, db: str, blobs: s
     with tempfile.TemporaryDirectory() as tmp:
         root = _seed(Path(tmp))
         fhir = FolderFhir(root)
-        companion = StandInCompanion(km, lab_reports={PATIENT: LAB_PHOTO})
+        patient_channel = PatientChannel()
+        companion = Companion(km, demo_lab_reports={PATIENT: LAB_PHOTO},
+                              history_provider=lambda _patient: {"rcc": True})
         briefer = StandInCaseBriefer()
         reader = ImagingReader(cortex, calibration, audit=desk.audit, clock=desk.clock)
         verifier = SafetyVerifier(now=desk.clock.now)
         archivist = Archivist(cortex)
         rt = {
-            "companion": await desk.add_seat(companion),
+            "companion": await desk.add_seat(
+                companion, companion_tools(km, patient_channel, wearables={PATIENT: HOME_BP})
+            ),
             "case_briefer": await desk.add_seat(briefer),
             "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(fhir, km, desk.clock.now,
                                                                                   {PATIENT: HOME_BP})),
