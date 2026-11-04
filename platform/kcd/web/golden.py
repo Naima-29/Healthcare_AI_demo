@@ -79,7 +79,7 @@ async def run_step(session: Session, n: int, *, pace: float = 0.7) -> None:
         await say(L["s3"][2], FEAT_PAIN)
     elif n == 4:
         await say(L["s4"])
-        if session.companion.talk(MARCO).awaiting_lab:
+        if MARCO in session.companion.awaiting_lab:
             await session.attach_lab(patient=MARCO)
     elif n == 5:
         await session.read_study(patient=MARCO)

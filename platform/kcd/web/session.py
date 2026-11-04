@@ -1,8 +1,8 @@
 """One running desk: every seat on kcd_core, two synthetic patients and the Clinical Board, for the web server.
 
-Real: Dispatcher + escalation, Renal Guardian, Safety Verifier, Knowledge Model, Imaging Reader, Genomics
+Real: Dispatcher + escalation, Companion, Renal Guardian, Safety Verifier, Knowledge Model, Imaging Reader, Genomics
 Interpreter, Archivist, Cortex, the Chief of Staff's compiler and, on request, Chrislin's CT model.
-Stand-ins: Companion, Case Briefer (kcd/web/seats.py). Everything lives in memory and in a temporary folder:
+Stand-in: Case Briefer (kcd/web/seats.py). Everything lives in memory and in a temporary folder:
 restarting the server, or pressing Reset, starts again from the fixtures.
 """
 
@@ -43,6 +43,7 @@ from kcd.knowledge import KnowledgeModel
 from kcd.scenarios.edge_cases import FIXTURES as ALL_FIXTURES
 from kcd.scenarios.edge_cases import SCRIPTED_VERSION, ScriptedCtModel
 from kcd.seats.archivist import Archivist
+from kcd.seats.companion import companion_tools
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader
 from kcd.seats.renal_guardian import RenalGuardian
@@ -50,7 +51,7 @@ from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 from kcd.util import sha256_hex
 from kcd.web.board import Board, Metrics, ObservedAudit, ObservedBus, RunningClock
 from kcd.web.hub import Hub
-from kcd.web.seats import NSAID_RULE, WebCaseBriefer, WebCompanion, WebVerifier
+from kcd.web.seats import NSAID_RULE, WebCaseBriefer, WebChannel, WebCompanion, WebVerifier
 
 MARCO, SOFIA = "marco-r", "sofia-b"
 PATIENTS = (MARCO, SOFIA)
@@ -166,15 +167,15 @@ class Session:
         self.versions = {s: [desk.registry.get(s)] for s in desk.registry.seats()}
         desk.registry.on_reload(self._on_reload)
 
-        self.companion = WebCompanion(self.km, hub, self.cortex, lang=self.lang, history_rcc=self._history_rcc,
+        self.companion = WebCompanion(self.km, hub, self.cortex, history_rcc=self._history_rcc,
                                       name_of=lambda cid: BY_ID[cid].name)
-        self.briefer = WebCaseBriefer(language_of=lambda p: self.companion.talk(p).lang, on_finding=self._on_finding)
+        self.briefer = WebCaseBriefer(language_of=lambda p: self.companion.session(p).language, on_finding=self._on_finding)
         self.reader = ImagingReader(self.cortex, None, audit=audit, clock=self.clock)
         self.archivist = Archivist(self.cortex)
         verifier = WebVerifier(now=self.clock.now, on_result=self._on_verification)
         wearables = {MARCO: HOME_BP, SOFIA: {"sbp": 152, "dbp": 94}}
         self.rt = {
-            "companion": await desk.add_seat(self.companion, self._patient_door_tools()),
+            "companion": await desk.add_seat(self.companion, companion_tools(self.km, WebChannel(hub), wearables=wearables)),
             "case_briefer": await desk.add_seat(self.briefer),
             "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(self.fhir, self.km, self.clock.now,
                                                                                   wearables)),
@@ -223,18 +224,6 @@ class Session:
                 SOFIA: [{"id": "ok", "label": "Lab report photo", "data": read("lab-photo-ok.json")},
                         {"id": "ocr-error", "label": "Photo misread by OCR (eGFR 400)",
                          "data": read("lab-photo-ocr-error.json")}]}
-
-    def _patient_door_tools(self) -> dict[str, Any]:
-        async def channel_send(patient: str, text: str) -> None:
-            self.hub.publish("patient_out", {"patient": patient, "text": text})
-
-        async def red_flags(**kw: Any) -> dict[str, Any] | None:
-            return self.km.red_flags(**kw)
-
-        async def parse_report(photo: dict[str, Any]) -> dict[str, Any]:  # the photo's on-device OCR result
-            return dict(photo)
-
-        return {"channel.send": channel_send, "km.red_flags": red_flags, "lab.parse_report": parse_report}
 
     def _history_rcc(self, patient: str) -> bool:
         conditions = " ".join(str(c.get("display")) for c in self.fhir.conditions(patient)).lower()

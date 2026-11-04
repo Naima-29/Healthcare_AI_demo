@@ -48,6 +48,26 @@ class CompanionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(env.type == MessageType.RED_FLAG_ESCALATION for env in routed))
         self.assertTrue(any(env.type == MessageType.SYMPTOM_REPORT for env in routed))
 
+    async def test_single_symptom_does_not_page_or_use_up_the_escalation(self):
+        companion, runtime = await self.start_companion(history_provider=lambda _patient: {"rcc": True})
+
+        async def say(text):
+            await companion.on_patient_text(runtime.context(), patient_id="pt_marco", episode_id="ep_1", text=text)
+            await self.desk.bus.drain()
+
+        await say("My urine is pink.")
+        self.assertEqual(self.desk.pager.pages, [])
+        self.assertFalse(any("medical assessment today" in m["text"] for m in self.channel.outbox))
+        await say("I have pain in my flank, 8 out of 10.")
+        self.assertEqual(len(self.desk.pager.pages), 1)
+        self.assertTrue(any("medical assessment today" in m["text"] for m in self.channel.outbox))
+
+    async def test_genetics_question_goes_to_the_specialist(self):
+        companion, runtime = await self.start_companion()
+        await companion.on_patient_text(runtime.context(), patient_id="pt_marco", episode_id="ep_1",
+                                        text="What does my DNA say?")
+        self.assertIn("specialist", self.channel.outbox[-1]["text"])
+
     async def test_medication_report_to_renal_guardian(self):
         companion, runtime = await self.start_companion()
         await companion.on_patient_text(

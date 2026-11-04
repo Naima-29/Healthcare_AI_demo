@@ -11,8 +11,9 @@ Python on Core (`core/kcd_core`), and the Node v2 demo stays the stage demo and 
 | `diana/agent-4` | Diana (Clinical reasoning) | Data-driven Knowledge Model (`rules.json`), Safety Verifier "every citation exists" check, 23 seat tests (Node) | merged; files moved into `demo/kidney-care-desk/` where they run; rules ported to Python (below) |
 | `naima/evidence-on-core` (incl. `naima/evidence-database`) | Naima (Evidence + Database) | Cortex memory, Imaging Reader, Genomics Interpreter, Archivist, evaluation harness | merged; re-ported to Core's new contracts |
 
-No branch yet from Meet (Companion) or Chrislin (Case Briefer, Clinical Board, CT model). The golden path uses
-clearly marked stand-ins for those two seats (`platform/kcd/standins.py`) and the v1 cached CT result (stub model).
+Meet's Companion and Chrislin's CT model are on `dev`. No branch yet from Chrislin for the Case Briefer and Clinical
+Board: the golden path uses a clearly marked stand-in Case Briefer (`platform/kcd/standins.py`) and, by default, the
+v1 cached CT result (stub model). The edge-case scenario still drives the stand-in Companion in that file.
 
 ## Run it
 
@@ -48,9 +49,15 @@ seats. What works from the screen:
 - **Edge cases**: runs the 52 checks (57 with the real model) and shows them as a table.
 - **Memory**: Cortex evidence and rules per patient, and erasing a patient.
 
-Still stand-ins, and labelled so on screen: the Companion's words (keyword reading, scripted interview; the camera
-and microphone presets are not a real camera or microphone) and the Case Briefer's SBAR. Telegram, FHIR and PACS
-servers are not connected: the data comes from the fixtures folders. It is a local demo: no login, the server holds
+The Companion is Meet's seat, behind `WebCompanion`. Its reading is keyword rules, and the camera and microphone
+buttons on the phone are presets, not a real camera or microphone. Still a stand-in, and labelled so on screen: the
+Case Briefer's SBAR. Telegram, FHIR and PACS servers are not connected: the data comes from the fixtures folders.
+
+For Meet to confirm: "blood in my urine" now counts as blood in the urine (`kcd/patient/nlu.py`), and two fixes in
+`kcd/seats/companion.py` (the missing `genetics_hold` wording crashed on a DNA
+question; a single "medium" symptom paged the doctor and used up the escalation a later "high" needed). The seat has
+no confirmed-rule reply or policy refusal for result questions yet, so `WebCompanion` adds them; they belong in the seat.
+ It is a local demo: no login, the server holds
 every clinician's signing key, it answers on this computer only, and all data is in memory until restart or Reset.
 
 The Python golden path runs on kcd_core with real seats: Dispatcher + escalation (Core), Renal Guardian +

@@ -84,7 +84,7 @@ main { height: calc(100vh - 112px); }
 .seg button.on { background: var(--ink); color: #fff; }
 .gauge { flex: 1; height: 8px; background: var(--chip); border-radius: 4px; overflow: hidden; min-width: 80px; }
 .gauge > i { display: block; height: 100%; background: var(--ok); transition: width .4s; }
-.gauge.medium > i { background: #D9A400; }
+.gauge.moderate > i { background: #D9A400; }
 .gauge.high > i { background: var(--gate); }
 .flag { color: #9a4a12; font-weight: 600; }
 .ph-quick { display: flex; gap: 5px; overflow-x: auto; padding: 6px 8px; background: #fff; border-top: 1px solid var(--chip); }

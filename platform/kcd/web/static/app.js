@@ -172,7 +172,7 @@ function renderStatus() {
   const d = S.data; if (!d) return;
   const c = d.config;
   $('#status').innerHTML = [
-    `<span class="pill" title="The real Companion and Case Briefer are not delivered yet. Their behaviour here is scripted; their messages are real.">Companion, Briefer: stand-ins</span>`,
+    `<span class="pill" title="The real Case Briefer is not delivered yet. Its behaviour here is scripted; its messages are real.">Case Briefer: stand-in</span>`,
     `<span class="pill ${d.ct_model.mode === 'real' ? 'ok' : ''}">CT: ${d.ct_model.mode === 'real' ? 'Chrislin’s model' : 'stub'}</span>`,
     `<span class="pill ${c.fhir ? 'ok' : ''}">FHIR: ${c.fhir ? 'live' : 'synthetic'}</span>`,
     `<span class="pill ${c.dicomweb ? 'ok' : ''}">PACS: ${c.dicomweb ? 'live' : 'demo'}</span>`,
@@ -218,7 +218,7 @@ function renderPhoneMsgs() {
   const html = msgs.map((e) => {
     const out = e.kind === 'patient_in';
     const t = e.data.text;
-    const cls = !out && /112/.test(t) && /oggi stesso|today/.test(t) ? 'safety' : !out && /rivisto il suo caso|reviewed your case|le ha indicato|asked you to avoid/.test(t) ? 'decision' : '';
+    const cls = !out && /medical assessment today|valutazione medica oggi/.test(t) ? 'safety' : !out && /esaminato il suo caso|reviewed your case|le ha indicato|asked you to avoid/.test(t) ? 'decision' : '';
     return `<div class="bubble ${out ? 'out' : 'in'} ${cls}">${esc(t)}<span class="meta">${time(e.ts)}${out ? ' ✓✓' : ''}</span></div>`;
   }).join('') || `<div class="bubble in">${esc(U().phoneHello.replace('Marco', S.data.patient.name.split(' ')[0]))}<span class="meta">—</span></div>`;
   $$('[data-mount="phone"]').forEach((m) => {
@@ -433,7 +433,7 @@ function renderRoster() {
   $('#roster').innerHTML = `<h2 style="margin-bottom:12px">Roster — the seats + the Chief of Staff</h2><div class="grid">${cos}${seats.map(({ id, manifest: m, metrics: x, shadow }) => `
     <div class="seat ${m.location === 'patient_edge' ? 'patient' : ''}">
       <div class="h">${AVATAR[id] ? `<img class="avatar" src="${AVATAR[id]}" alt="">` : `<span class="avatar">${INITIALS(m.name)}</span>`}<div><h3>${esc(m.name)} <span style="font:500 11px var(--body);color:var(--muted)">v${m.version}${shadow ? ' · shadow' : ''}</span></h3><div class="role">${esc(m.role || '')}</div></div></div>
-      <div class="chips">${chip('', m.location === 'patient_edge' ? 'patient phone' : 'hospital edge')}${id === 'companion' || id === 'case_briefer' ? chip('gate', 'stand-in behaviour') : ''}${shadow ? chip('gate', 'no code yet') : ''}</div>
+      <div class="chips">${chip('', m.location === 'patient_edge' ? 'patient phone' : 'hospital edge')}${id === 'case_briefer' ? chip('gate', 'stand-in behaviour') : ''}${shadow ? chip('gate', 'no code yet') : ''}</div>
       <div class="jd">${esc(m.job_description)}</div>
       <div class="chips">${m.refuses.map((r) => chip('ref', r)).join('')}</div>
       <div class="chips">${m.gates.map((g) => chip('gate', g)).join('')}</div>

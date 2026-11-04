@@ -73,14 +73,15 @@ def test_golden_path_end_to_end(client: TestClient) -> None:
     assert {"red_flag_escalation", "medication_report", "therapy_conflict", "imaging_signal", "data_delivered",
             "case_pack_ready", "clinician_decision"} <= types
     # The doctor was paged once, and every gate on the Board was closed by a named person's signature.
-    assert [p["name"] for p in events(client, "page")] == ["Dr. A. Rossi"]
+    pages = events(client, "page")
+    assert [p["name"] for p in pages] == ["Dr. A. Rossi"] and "severe flank pain" in pages[0]["message"]
     statuses = {i["kind"]: i["status"] for i in s["board"]}
     assert statuses["escalation"] == "acknowledged" and statuses["imaging"] == "reviewed"
     assert statuses["case_pack"] == "signed" and statuses["rule"] == "confirmed"
     # The patient heard: the safety script, a hold on the CT, the signed decision, and the confirmed rule.
     said = replies(client)
-    assert any("call 112" in t and "today" in t for t in said)
-    assert any("being reviewed by your doctor" in t for t in said)
+    assert any("needs medical assessment today" in t for t in said)
+    assert any("must be reviewed by your doctor" in t for t in said)
     assert any("Dr. A. Rossi" in t and "reviewed your case" in t and "stop taking ibuprofen" in t for t in said)
     assert "asked you to avoid ibuprofen" in said[-1]
     # Cortex holds it, chained, with the rules confirmed by a person.
@@ -103,7 +104,7 @@ def test_imaging_question_is_refused_at_the_policy_layer(client: TestClient) -> 
     say(client, "I had a CT scan yesterday: what did it show?")
     refusal = events(client, "refusal")[-1]
     assert refusal["seat"] == "companion" and refusal["refusal"] == "disclose_imaging_before_review"
-    assert "being reviewed by your doctor" in replies(client)[-1]
+    assert "must be reviewed by your doctor" in replies(client)[-1]
 
 
 def test_genetics_question_is_refused(client: TestClient) -> None:
