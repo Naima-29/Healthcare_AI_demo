@@ -1,8 +1,8 @@
 import os
-import re
 import time
+
 import requests
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 import kcd.patient.nlu as nlu_mod
 from kcd.knowledge import KnowledgeModel

@@ -32,13 +32,13 @@ from kcd.imaging.calibration import Calibration
 from kcd.imaging.model import CallableCtModel, CtModel, FixedCtModel, HttpCtModel
 from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
+from kcd.patient.channel import PatientChannel
 from kcd.seats.archivist import Archivist
+from kcd.seats.companion import Companion, companion_tools
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.seats.safety_verifier import SafetyVerifier
-from kcd.seats.companion import Companion, companion_tools
-from kcd.patient.channel import PatientChannel
 from kcd.standins import StandInCaseBriefer
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 

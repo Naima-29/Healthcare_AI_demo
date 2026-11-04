@@ -7,12 +7,6 @@ separate adapter and is intentionally not fabricated here.
 """
 from __future__ import annotations
 
-try:
-    from dotenv import find_dotenv, load_dotenv
-    load_dotenv(find_dotenv())
-except ImportError:
-    pass
-
 import asyncio
 import json
 import os
@@ -20,6 +14,12 @@ import urllib.parse
 import urllib.request
 from collections.abc import Awaitable, Callable
 from typing import Any
+
+try:
+    from dotenv import find_dotenv, load_dotenv
+    load_dotenv(find_dotenv())
+except ImportError:
+    pass
 
 
 InboundHandler = Callable[[str, str, dict[str, Any]], Awaitable[None]]
@@ -33,7 +33,7 @@ class PatientChannel:
         self.offset = 0
 
     @classmethod
-    def from_env(cls, patient_id: str) -> "PatientChannel":
+    def from_env(cls, patient_id: str) -> PatientChannel:
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         chat_id = os.getenv("TELEGRAM_CHAT_ID")
         mapping = {patient_id: chat_id} if chat_id else {}
@@ -72,8 +72,8 @@ class PatientChannel:
             query = urllib.parse.urlencode({"timeout": 20, "offset": self.offset})
             url = f"https://api.telegram.org/bot{self.token}/getUpdates?{query}"
 
-            def request() -> dict[str, Any]:
-                with urllib.request.urlopen(url, timeout=25) as response:
+            def request(req_url: str = url) -> dict[str, Any]:
+                with urllib.request.urlopen(req_url, timeout=25) as response:
                     return json.loads(response.read().decode("utf-8"))
 
             try:

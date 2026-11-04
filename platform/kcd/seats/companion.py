@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from kcd_core.contracts import Envelope, MessageType
 from kcd_core.contracts.messages import (
@@ -30,41 +31,76 @@ from kcd.knowledge import KnowledgeModel
 from kcd.patient.fuzzy import from_features
 from kcd.patient.nlu import extract
 
-
 TEXT = {
     "en": {
         "hello": "I am here with you. Tell me how you feel today.",
-        "q1": "Where exactly is the pain: on the side under the ribs, or lower in the back? Does it get worse when you move?",
-        "q2": "Have you noticed any change in your urine, such as blood, darker urine, burning or difficulty passing urine?",
-        "q3": "Have you also had fever, chills, nausea, weight loss or loss of appetite, or felt weaker than usual?",
-        "q4": "From 0 to 10, how strong is the pain now? Any dizziness, or trouble with everyday activities?",
-        "noted": "Thank you. I have passed your information to your care team. If anything gets worse, message me.",
-        "safety": "What you describe needs medical assessment today. Please seek urgent medical care now. If you feel faint, have heavy bleeding or your pain becomes severe, call your local emergency number. I have alerted your care team.",
-        "med_ack": "Thank you. I have reported this medicine to your care team. Please do not change your medicines yourself; your clinician will advise you.",
-        "lab_ask": "Your care team needs your latest blood-test report. Please send a clear photo of the most recent report.",
+        "q1": (
+            "Where exactly is the pain: on the side under the ribs, "
+            "or lower in the back? Does it get worse when you move?"
+        ),
+        "q2": (
+            "Have you noticed any change in your urine, such as blood, "
+            "darker urine, burning or difficulty passing urine?"
+        ),
+        "q3": (
+            "Have you also had fever, chills, nausea, weight loss or loss "
+            "of appetite, or felt weaker than usual?"
+        ),
+        "q4": (
+            "From 0 to 10, how strong is the pain now? Any dizziness, "
+            "or trouble with everyday activities?"
+        ),
+        "noted": "Thank you. I have shared this with your care team. If anything gets worse, message me.",
+        "safety": (
+            "What you describe needs medical assessment today. Please seek urgent medical care now. "
+            "If you feel faint, have heavy bleeding or your pain becomes severe, call your local emergency number. "
+            "I have alerted your care team."
+        ),
+        "med_ack": (
+            "Thank you. I have reported this medicine to your care team. "
+            "Please do not change your medicines yourself; your clinician will advise you."
+        ),
+        "lab_ask": (
+            "Your care team needs your latest blood-test report. "
+            "Please send a clear photo of the most recent report."
+        ),
         "lab_thanks": "Thank you. I have sent the report to your care team.",
         "imaging_hold": "Your images must be reviewed by your doctor. I cannot interpret or disclose imaging results.",
-        "genetics_hold": "A specialist will discuss genetic findings with you. I cannot disclose those results.",
-        "decision_head": "Your clinician ({who}) has reviewed your case and asks you to:",
-        "decision_tail": "If your symptoms worsen, seek urgent medical help. I am here if you have questions.",
-        "refused": "That is a question for your clinician. I can pass your concern to the care team.",
     },
     "it": {
         "hello": "Sono qui con lei. Mi racconti come si sente oggi.",
-        "q1": "Dove sente esattamente il dolore: sul fianco sotto le costole o più in basso sulla schiena? Peggiora quando si muove?",
-        "q2": "Ha notato cambiamenti nelle urine, per esempio sangue, urine più scure, bruciore o difficoltà a urinare?",
+        "q1": (
+            "Dove sente esattamente il dolore: sul fianco sotto le costole "
+            "o più in basso sulla schiena? Peggiora quando si muove?"
+        ),
+        "q2": (
+            "Ha notato cambiamenti nelle urine, per esempio sangue, "
+            "urine più scure, bruciore o difficoltà a urinare?"
+        ),
         "q3": "Ha avuto febbre, brividi, nausea, perdita di peso o appetito, o si sente più debole del solito?",
-        "q4": "Da 0 a 10, quanto è forte il dolore adesso? Ha giramenti di testa o difficoltà nelle attività quotidiane?",
+        "q4": (
+            "Da 0 a 10, quanto è forte il dolore adesso? "
+            "Ha giramenti di testa o difficoltà nelle attività quotidiane?"
+        ),
         "noted": "Grazie. Ho trasmesso le informazioni al suo team di cura. Se qualcosa peggiora, mi scriva.",
-        "safety": "Quello che descrive richiede una valutazione medica oggi. Cerchi subito assistenza medica urgente. Se si sente svenire, ha molto sangue o il dolore diventa forte, chiami il numero di emergenza locale. Ho avvisato il suo team di cura.",
-        "med_ack": "Grazie. Ho segnalato questo farmaco al suo team. Non modifichi da solo la terapia: sarà il medico a darle indicazioni.",
-        "lab_ask": "Il suo team ha bisogno dell'ultimo esame del sangue. Invii una foto leggibile del referto più recente.",
+        "safety": (
+            "Quello che descrive richiede una valutazione medica oggi. Cerchi subito assistenza medica urgente. "
+            "Se si sente svenire, ha molto sangue o il dolore diventa forte, chiami il numero di emergenza locale. "
+            "Ho avvisato il suo team di cura."
+        ),
+        "med_ack": (
+            "Grazie. Ho segnalato questo farmaco al suo team. "
+            "Non modifichi da solo la terapia: sarà il medico a darle indicazioni."
+        ),
+        "lab_ask": (
+            "Il suo team ha bisogno dell'ultimo esame del sangue. "
+            "Invii una foto leggibile del referto più recente."
+        ),
         "lab_thanks": "Grazie. Ho inviato il referto al suo team di cura.",
-        "imaging_hold": "Le immagini devono essere valutate dal medico. Non posso interpretare o comunicare i risultati delle immagini.",
-        "genetics_hold": "Sarà uno specialista a discutere con lei i risultati genetici. Non posso comunicarli.",
-        "decision_head": "Il suo medico ({who}) ha rivisto il caso e le chiede di:",
-        "decision_tail": "Se i sintomi peggiorano, cerchi assistenza medica urgente. Sono qui per eventuali domande.",
-        "refused": "Questa è una domanda per il suo medico. Posso trasmettere la sua richiesta al team di cura.",
+        "imaging_hold": (
+            "Le immagini devono essere valutate dal medico. "
+            "Non posso interpretare o comunicare i risultati delle immagini."
+        ),
     },
 }
 

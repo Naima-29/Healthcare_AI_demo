@@ -24,7 +24,8 @@ def _shoulder_right(a: float, b: float, x: float) -> float:
 
 def pspi(au: dict[str, Any] | None = None) -> float:
     au = au or {}
-    value = lambda key: float(au.get(key) or 0)
+    def value(key: str) -> float:
+        return float(au.get(key) or 0)
     return value("AU4") + max(value("AU6"), value("AU7")) + max(value("AU9"), value("AU10")) + value("AU43")
 
 
