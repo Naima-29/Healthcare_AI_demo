@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install kcd_core and the seats' dependencies
-        run: pip install -e . "numpy>=1.26" "pillow>=10.0" "sqlalchemy>=2.0" "fastapi>=0.110" "uvicorn>=0.29" "httpx>=0.27" pytest
+        run: pip install -e . "numpy>=1.26" "pillow>=10.0" "sqlalchemy>=2.0" "fastapi>=0.162" "starlette>=1.10" "uvicorn>=0.29" "httpx2>=2" pytest
       - name: Seat tests
         working-directory: platform
         run: python -W error -m pytest -q -p no:asyncio
