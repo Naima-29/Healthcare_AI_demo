@@ -8,9 +8,12 @@ separate adapter and is intentionally not fabricated here.
 from __future__ import annotations
 
 import os
-from dotenv import find_dotenv, load_dotenv
 
-load_dotenv(find_dotenv())
+try:
+    from dotenv import find_dotenv, load_dotenv
+    load_dotenv(find_dotenv())
+except ImportError:
+    pass
 
 import asyncio
 import json
