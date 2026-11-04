@@ -7,8 +7,6 @@ separate adapter and is intentionally not fabricated here.
 """
 from __future__ import annotations
 
-import os
-
 try:
     from dotenv import find_dotenv, load_dotenv
     load_dotenv(find_dotenv())
