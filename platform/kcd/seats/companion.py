@@ -66,6 +66,8 @@ TEXT = {
         ),
         "lab_thanks": "Thank you. I have sent the report to your care team.",
         "imaging_hold": "Your images must be reviewed by your doctor. I cannot interpret or disclose imaging results.",
+        "decision_head": "Your clinician ({who}) has reviewed your case and provided the following instructions:",
+        "decision_tail": "Please contact your care team if you have any questions or if your symptoms change.",
     },
     "it": {
         "hello": "Sono qui con lei. Mi racconti come si sente oggi.",
@@ -101,6 +103,8 @@ TEXT = {
             "Le immagini devono essere valutate dal medico. "
             "Non posso interpretare o comunicare i risultati delle immagini."
         ),
+        "decision_head": "Il suo medico ({who}) ha esaminato il suo caso e ha fornito le seguenti indicazioni:",
+        "decision_tail": "Contatti il suo team di cura se ha domande o se i suoi sintomi cambiano.",
     },
 }
 
