@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -252,6 +253,25 @@ def test_chrislins_model_path_uses_its_own_calibration(client: TestClient, monke
     assert read_ct(client).json()["status"] == "ok"
     data = items(client, "imaging")[0]["data"]
     assert data["label"] == "tumor" and data["provenance"]["live_model"] is True and "T=0.798" in data["calibration"]
+
+
+def test_choosing_chrislins_model_loads_it_in_the_background(client: TestClient,
+                                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    from kcd.imaging import chrislin_model
+    from kcd.web import session as web_session
+
+    loaded = []
+    monkeypatch.setattr(web_session, "real_model_available", lambda: True)
+    monkeypatch.setattr(chrislin_model, "load", lambda: loaded.append("load"))
+    monkeypatch.setattr(chrislin_model, "engine", lambda: "openvino" if loaded else None)
+    assert client.post("/api/pacs/model", json={"mode": "real"}).status_code == 200
+    for _ in range(50):  # the load runs after the request returns
+        if any("is ready" in n["text"] for n in events(client, "note")):
+            break
+        time.sleep(0.05)
+    notes = [n["text"] for n in events(client, "note")]
+    assert loaded == ["load"] and any("Loading Chrislin's model" in t for t in notes)
+    assert any("ready (engine: openvino)" in t for t in notes)
 
 
 def test_chrislins_model_is_refused_when_its_weights_are_missing(client: TestClient,

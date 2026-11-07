@@ -365,6 +365,18 @@ class Session:
             raise DeskError("Chrislin's model needs its weights under models/kidney_project and the ct-model extras")
         self.ct_mode = mode
         self.hub.publish("ct_model", {"mode": mode})
+        if mode == "real":
+            self.spawn(self._load_real_model())
+
+    async def _load_real_model(self) -> None:
+        """Load the networks as soon as the model is chosen, so the first reading doesn't wait for them."""
+        from kcd.imaging import chrislin_model
+
+        if chrislin_model.engine() is None:
+            self.hub.publish("note", {"seat": "imaging_reader", "text": "Loading Chrislin's model (once per run)."})
+        await asyncio.to_thread(chrislin_model.load)
+        self.hub.publish("note", {"seat": "imaging_reader",
+                                  "text": f"Chrislin's model is ready (engine: {chrislin_model.engine()})."})
 
     def studies(self, patient: str | None = None) -> list[dict[str, Any]]:
         patient = self._patient(patient)
