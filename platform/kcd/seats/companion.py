@@ -66,6 +66,7 @@ TEXT = {
         ),
         "lab_thanks": "Thank you. I have sent the report to your care team.",
         "imaging_hold": "Your images must be reviewed by your doctor. I cannot interpret or disclose imaging results.",
+        "genetics_hold": "A specialist will discuss these results with you in a dedicated conversation.",
         "decision_head": "Your clinician ({who}) has reviewed your case and provided the following instructions:",
         "decision_tail": "Please contact your care team if you have any questions or if your symptoms change.",
     },
@@ -103,6 +104,7 @@ TEXT = {
             "Le immagini devono essere valutate dal medico. "
             "Non posso interpretare o comunicare i risultati delle immagini."
         ),
+        "genetics_hold": "Di questi risultati le parlerà lo specialista, in un colloquio dedicato.",
         "decision_head": "Il suo medico ({who}) ha esaminato il suo caso e ha fornito le seguenti indicazioni:",
         "decision_tail": "Contatti il suo team di cura se ha domande o se i suoi sintomi cambiano.",
     },
@@ -312,7 +314,9 @@ class Companion(Seat):
             distress_level=(session.distress or {}).get("level"),
             distress_score=(session.distress or {}).get("score"),
         )
-        if red_flag and not session.red_flag_sent:
+        # Only "high" gets the safety script and a page; a single symptom ("medium") goes on with the interview,
+        # and must not use up the one escalation that a later "high" needs.
+        if red_flag and red_flag["urgency"] == "high" and not session.red_flag_sent:
             session.red_flag_sent = True
             await self._say(ctx, patient_id, lang["safety"])
             await self.escalate(ctx, patient_id=patient_id, episode_id=episode_id, red_flag=red_flag,

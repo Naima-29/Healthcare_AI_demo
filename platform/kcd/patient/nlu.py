@@ -40,7 +40,7 @@ def extract(text: str, classify_drug: Callable[[str], dict[str, str] | None] | N
         add("flank_pain", "flank pain")
     if re.search(
         r"(sangue nelle urine|urine[^.]{0,20}(rosa|rosate|rosse|scure|sangue)|rosso scuro|ematuria|"
-        r"blood in (the )?urine|pink(ish)? urine|urine (is|are) (pink|red|dark)|dark red|hematuria|haematuria)",
+        r"blood in (the |my )?urine|pink(ish)? urine|urine (is|are) (pink|red|dark)|dark red|hematuria|haematuria)",
         t,
     ):
         add("visible_hematuria", "visible blood in urine")

@@ -11,8 +11,9 @@ Python on Core (`core/kcd_core`), and the Node v2 demo stays the stage demo and 
 | `diana/agent-4` | Diana (Clinical reasoning) | Data-driven Knowledge Model (`rules.json`), Safety Verifier "every citation exists" check, 23 seat tests (Node) | merged; files moved into `demo/kidney-care-desk/` where they run; rules ported to Python (below) |
 | `naima/evidence-on-core` (incl. `naima/evidence-database`) | Naima (Evidence + Database) | Cortex memory, Imaging Reader, Genomics Interpreter, Archivist, evaluation harness | merged; re-ported to Core's new contracts |
 
-No branch yet from Meet (Companion) or Chrislin (Case Briefer, Clinical Board, CT model). The golden path uses
-clearly marked stand-ins for those two seats (`platform/kcd/standins.py`) and the v1 cached CT result (stub model).
+Meet's Companion and Chrislin's CT model are on `dev`. No branch yet from Chrislin for the Case Briefer and Clinical
+Board: the golden path uses a clearly marked stand-in Case Briefer (`platform/kcd/standins.py`) and, by default, the
+v1 cached CT result (stub model). The edge-case scenario still drives the stand-in Companion in that file.
 
 ## Run it
 
@@ -25,6 +26,39 @@ python -m kcd.demo                                  # the golden path, deck slid
 python -m kcd.scenarios.edge_cases                  # every edge case for one patient (Sofia B.): 52 checks
 cd ../demo/kidney-care-desk && npm start            # the Node stage demo (UI), http://localhost:5173
 ```
+
+### In the browser
+
+```bash
+pip install fastapi uvicorn                         # plus the install above
+cd platform
+python -m kcd.web                                   # http://127.0.0.1:8000
+```
+
+`platform/kcd/web/` serves the stage UI (a copy of the demo's frontend, extended; `demo/` is untouched) on the real
+seats. What works from the screen:
+
+- **Golden path**: Autoplay or each of the 7 steps, with Marco R.
+- **Patient**: type on the phone or use the quick lines; send a lab photo. Choose Marco R. or Sofia B. at the top.
+- **Clinicians**: acknowledge, review the CT, edit and sign the decision, confirm or reject rules. Each signature is a
+  real Ed25519 release. A case pack with a CT can't be signed before a radiologist reviews it.
+- **Director**: real Chief of Staff compiler; rules hot-reload and are enforced by the PEP. A new seat stays in shadow.
+- **CT studies**: read any study (Sofia's 11 edge cases), or upload an image. Switch the CT model at the top: the stub
+  answers only for its own studies, Chrislin's model reads anything (it needs her weights in `models/kidney_project`
+  and the `ct-model` extras in `platform/pyproject.toml`; about 25 s per slice on a CPU).
+- **Edge cases**: runs the 52 checks (57 with the real model) and shows them as a table.
+- **Memory**: Cortex evidence and rules per patient, and erasing a patient.
+
+The Companion is Meet's seat, behind `WebCompanion`. Its reading is keyword rules, and the camera and microphone
+buttons on the phone are presets, not a real camera or microphone. Still a stand-in, and labelled so on screen: the
+Case Briefer's SBAR. Telegram, FHIR and PACS servers are not connected: the data comes from the fixtures folders.
+
+For Meet to confirm: "blood in my urine" now counts as blood in the urine (`kcd/patient/nlu.py`), and two fixes in
+`kcd/seats/companion.py` (the missing `genetics_hold` wording crashed on a DNA
+question; a single "medium" symptom paged the doctor and used up the escalation a later "high" needed). The seat has
+no confirmed-rule reply or policy refusal for result questions yet, so `WebCompanion` adds them; they belong in the seat.
+ It is a local demo: no login, the server holds
+every clinician's signing key, it answers on this computer only, and all data is in memory until restart or Reset.
 
 The Python golden path runs on kcd_core with real seats: Dispatcher + escalation (Core), Renal Guardian +
 Safety Verifier + Knowledge Model (Diana's rules), Imaging Reader + Genomics Interpreter + Archivist + Cortex
