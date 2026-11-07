@@ -35,23 +35,23 @@ cd platform
 python -m kcd.web                                   # http://127.0.0.1:8000
 ```
 
-`platform/kcd/web/` serves the stage UI (a copy of the demo's frontend, extended; `demo/` is untouched) on the real
-seats. What works from the screen:
+`platform/kcd/web/static/` is Chrislin's frontend (from PR #9, unchanged), served by the FastAPI server in
+`platform/kcd/web/` on the real seats. What works from the screen:
 
-- **Golden path**: Autoplay or each of the 7 steps, with Marco R.
-- **Patient**: type on the phone or use the quick lines; send a lab photo. Choose Marco R. or Sofia B. at the top.
-- **Clinicians**: acknowledge, review the CT, edit and sign the decision, confirm or reject rules. Each signature is a
-  real Ed25519 release. A case pack with a CT can't be signed before a radiologist reviews it.
-- **Director**: real Chief of Staff compiler; rules hot-reload and are enforced by the PEP. A new seat stays in shadow.
-- **CT studies**: read any study (Sofia's 11 edge cases), or upload an image. Switch the CT model at the top: the stub
-  answers only for its own studies, Chrislin's model reads anything (it needs her weights in `models/kidney_project`
-  and the `ct-model` extras in `platform/pyproject.toml`; about 25 s per slice on a CPU).
-- **Edge cases**: runs the 52 checks (57 with the real model) and shows them as a table.
-- **Memory**: Cortex evidence and rules per patient, and erasing a patient.
+- **Golden path**: Autoplay, or each of the 5 steps, for the patient chosen at the top (Marco R. or Sofia B.).
+  Step 5 puts the case pack on the Clinical Board.
+- **Patient**: type on the phone or use the quick lines; send the lab photo.
+- **Clinical Board**: acknowledge the red flag; each specialist reviews their gate on the case pack; edit and sign
+  the decision; confirm or reject rules. Each signature is a real Ed25519 release, and signing waits for every review.
+- **Flow, Roster, Agent page, Memory**: the message map and stream, the live manifests, and Cortex per patient.
 
-The Companion is Meet's seat, behind `WebCompanion`. Its reading is keyword rules, and the camera and microphone
-buttons on the phone are presets, not a real camera or microphone. Still a stand-in, and labelled so on screen: the
-Case Briefer's SBAR. Telegram, FHIR and PACS servers are not connected: the data comes from the fixtures folders.
+The server also serves endpoints that her frontend has no screen for yet: the Director (`/api/director`, the Chief
+of Staff compiler), CT studies, upload and the model switch (`/api/pacs/...`), the edge-case run
+(`/api/edge-cases/run`) and erasure (`/api/patient/erase`). `tests/test_web.py` covers them.
+
+The Companion is Meet's seat, behind `WebCompanion`. Its reading is keyword rules (it misses negation: "no blood in
+the urine" counts as blood), and the camera and microphone buttons on the phone are presets, not a real camera or
+microphone. Telegram, FHIR and PACS servers are not connected: the data comes from the fixtures folders.
 
 For Meet to confirm: "blood in my urine" now counts as blood in the urine (`kcd/patient/nlu.py`), and two fixes in
 `kcd/seats/companion.py` (the missing `genetics_hold` wording crashed on a DNA

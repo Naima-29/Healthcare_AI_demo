@@ -19,7 +19,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from kcd.scenarios.edge_cases import FIXTURES, PATIENT, EdgeCases, real_model_checks
 from kcd.web import director, golden
 from kcd.web.hub import Hub
-from kcd.web.session import DeskError, Session, real_model_available
+from kcd.web.session import PATIENTS, DeskError, Session, real_model_available
 
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_TEXT = 4000
@@ -106,12 +106,13 @@ def create_app() -> FastAPI:
     @app.post("/api/patient/message")
     async def patient_message(request: Request) -> dict[str, bool]:
         body = await _body(request)
-        await desk().patient_message(_text(body), body.get("features"))
+        await desk().patient_message(_text(body), body.get("features"), body.get("patient"))
         return {"ok": True}
 
     @app.post("/api/patient/attach-lab")
     async def attach_lab(request: Request) -> dict[str, bool]:
-        await desk().attach_lab((await _body(request)).get("photo"))
+        b = await _body(request)
+        await desk().attach_lab(b.get("photo"), b.get("patient"))
         return {"ok": True}
 
     @app.post("/api/patient/select")
@@ -126,8 +127,9 @@ def create_app() -> FastAPI:
     @app.post("/api/board/act")
     async def board_act(request: Request) -> dict[str, bool]:
         b = await _body(request)
+        note = b.get("reason") if b.get("action") == "reject" else b.get("note")  # Chrislin's UI sends "reason"
         await desk().board_act(_text(b, "item"), _text(b, "action"), _text(b, "clinician"), b.get("items"),
-                               str(b.get("note") or ""), b.get("gate"))
+                               str(note or ""), b.get("gate"))
         return {"ok": True}
 
     # ------------------------------------------------------------------ CT studies
@@ -163,10 +165,15 @@ def create_app() -> FastAPI:
         desk().set_ct_model(_text(await _body(request), "mode"))
         return {"ok": True}
 
-    @app.get("/api/evidence/{patient}/{evidence_id}")
-    async def evidence(patient: str, evidence_id: str) -> Response:
+    @app.get("/api/evidence/{ref:path}")
+    async def evidence(ref: str) -> Response:
+        """`<patient>/<evidence id>`, or the Board's own reference `cortex:evidence/<id>`."""
+        patient, _, evidence_id = ref.partition("/")
         try:
-            data, media = desk().evidence_image(patient, evidence_id)
+            if patient in PATIENTS and evidence_id:
+                data, media = desk().evidence_image(patient, evidence_id)
+            else:
+                data, media = desk().evidence_by_ref(ref)
         except LookupError as e:
             raise DeskError("no such evidence", 404) from e
         return Response(data, media_type=media, headers={"X-Content-Type-Options": "nosniff"})
@@ -208,14 +215,14 @@ def create_app() -> FastAPI:
         if not any(s["n"] == n for s in golden.STEPS):
             raise DeskError("'n' must be a golden path step", 422)
         if b.get("wait"):
-            await golden.run_step(desk(), n, pace=0)
+            await golden.run_step(desk(), n, b.get("patient"), pace=0)
             return JSONResponse({"ok": True})
-        _start_scenario(golden.run_step(desk(), n))
+        _start_scenario(golden.run_step(desk(), n, b.get("patient")))
         return JSONResponse({"started": True}, status_code=202)
 
     @app.post("/api/scenario/autoplay")
-    async def scenario_autoplay() -> JSONResponse:
-        _start_scenario(golden.autoplay(desk()))
+    async def scenario_autoplay(request: Request) -> JSONResponse:
+        _start_scenario(golden.autoplay(desk(), (await _body(request)).get("patient")))
         return JSONResponse({"started": True}, status_code=202)
 
     @app.post("/api/reset")

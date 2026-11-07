@@ -134,11 +134,10 @@ class Session:
         self.imaging_lock = asyncio.Lock()
         self.tasks: set[asyncio.Task] = set()
         self.busy = False
-        self.done_steps: set[int] = set()
+        self.done_steps: set[tuple[str, int]] = set()
+        self.running: tuple[int, str] | None = None
         self.edge_report: dict[str, Any] | None = None
         self.edge_running = False
-        self._checks: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        self._panels_shown: set[tuple[str, str]] = set()
         self.work = tempfile.TemporaryDirectory(prefix="kcd-web-", dir=os.environ.get("KCD_WEB_WORK"))
         root = _seed(Path(self.work.name))
         shutil.copytree(ALL_FIXTURES / SOFIA, root / SOFIA)
@@ -175,8 +174,7 @@ class Session:
 
         self.companion = WebCompanion(self.km, hub, self.cortex, history_rcc=self._history_rcc,
                                       name_of=lambda cid: BY_ID[cid].name)
-        self.briefer = WebCaseBriefer(now=self.clock.now, language_of=lambda p: self.companion.session(p).language,
-                                      on_finding=self._on_finding)
+        self.briefer = WebCaseBriefer(now=self.clock.now, language_of=lambda p: self.companion.session(p).language)
         self.board.decide = lambda patient, release, items, note: self.briefer.publish_decision(
             self._ctx("case_briefer"), patient_id=patient, release=release, items=items, note=note)
         self.board.confirm_rule_fn, self.board.reject_rule_fn = self._confirm_rule, self._reject_rule
@@ -265,11 +263,15 @@ class Session:
         self.hub.publish("page", {"name": name, "pager": pager, "patient": esc.patient_id,
                                   "message": f"{esc.patient_id}: {flag.get('pattern', 'red flag')}"})
         item = self._item_where(kind="escalation", artifact_id=esc.id)
-        data = {"pattern": flag.get("pattern"), "evidence": flag.get("evidence"), "level": len(esc.paged),
-                "paged": {"name": name, "pager": pager}, "deadline": self._deadline(esc)}
+        data = {"pattern": flag.get("pattern"), "evidence": flag.get("evidence", []), "level": esc.level,
+                # Core pages before it records the target in esc.paged
+                "paged": [BY_ID[t].name if t in BY_ID else t for t in dict.fromkeys((*esc.paged, target))],
+                "unit": esc.unit,
+                "deadline": self._deadline(esc)}
         if item is None:  # the Board acknowledges through Core's EscalationService, by this id
+            who_ = self.fhir.patient(esc.patient_id)["name"] if esc.patient_id in PATIENTS else esc.patient_id
             self.board.create_item({"kind": "escalation", "gate": "urgent_ack", "patient_id": esc.patient_id,
-                                    "title": f"Red flag · {esc.patient_id}", "artifact_id": esc.id, "data": data})
+                                    "title": f"Urgent: red flag for {who_}", "artifact_id": esc.id, "data": data})
         else:
             self.board.update_item(item["id"], {"data": data})
 
@@ -291,7 +293,6 @@ class Session:
                     self.board.update_item(item["id"], {"status": "exhausted: emergency desk paged"})
 
     def _on_verification(self, patient: str, row: dict[str, Any]) -> None:
-        self._checks[(patient, row["type"])] = row["checks"]
         self.hub.publish("verification", {**row, "patient": patient})
         if not row["passed"]:
             if row["type"] == "therapy_conflict":
@@ -300,23 +301,6 @@ class Session:
             self._info(patient, "verification_failed", f"Stopped by the Safety Verifier: {row['type']}",
                        {"from": row["from"], "failed": failed, "checks": row["checks"],
                         "meaning": "Kept out of the case pack. The seat that produced it was told."})
-
-    def _on_finding(self, patient: str, kind: str, p: dict[str, Any]) -> None:
-        if kind == "imaging_signal":
-            self._info(patient, "imaging", f"CT signal · {p['provenance']['study_uid']}",
-                       {**p, "key_image": self._image_url(patient, p.get("key_image")),
-                        "heatmap_ref": self._image_url(patient, p.get("heatmap_ref")),
-                        "verification": {"checks": self._checks.get((patient, kind), [])}})
-        elif kind == "data_delivered" and p.get("kind") == "genomic_context":
-            d = p["data"]
-            if (patient, d.get("panel_id")) not in self._panels_shown:
-                self._panels_shown.add((patient, d.get("panel_id")))
-                self._info(patient, "genomics", f"Genomic context · {d.get('panel_id')}",
-                           {**d, "panel": d.get("panel_id"), "citations": p.get("citations")})
-
-    @staticmethod
-    def _image_url(patient: str, ref: str | None) -> str | None:
-        return f"/api/evidence/{patient}/{ref.rpartition('/')[2]}" if ref else None
 
     # ------------------------------------------------------------------ patient door
     def _patient(self, patient: str | None) -> str:
@@ -437,6 +421,17 @@ class Session:
             "key_image": key}), encoding="utf-8")
         return study_uid
 
+    def evidence_by_ref(self, ref: str) -> tuple[bytes, str]:
+        """An image by its Board reference ("cortex:evidence/<id>"): evidence ids are global, so look in each
+        patient's partition."""
+        ev_id = ref.removeprefix("cortex:evidence/")
+        for patient in PATIENTS:
+            try:
+                return self.evidence_image(patient, ev_id)
+            except LookupError:
+                continue
+        raise DeskError(f"no such evidence {ev_id}", 404)
+
     def evidence_image(self, patient: str, evidence_id: str) -> tuple[bytes, str]:
         row = self.cortex.get_evidence(3, self._patient(patient), evidence_id)
         if not row.get("blob_sha256"):
@@ -463,7 +458,7 @@ class Session:
 
     async def board_act(self, item_id: str, action: str, clinician: str, items: list[dict] | None = None,
                         note: str = "", gate: str | None = None) -> None:
-        c = BY_NAME.get(clinician)
+        c = BY_ID.get(clinician) or BY_NAME.get(clinician)
         if c is None:
             raise DeskError(f"unknown clinician {clinician!r}", 422)
         try:
@@ -486,7 +481,8 @@ class Session:
         except (BoardError, PolicyViolation) as e:
             raise DeskError(str(e)) from e
         await self.drain()
-        self.hub.publish("gate", {"clinician": c.name, "gate": gate or item["gate"], "action": action, "verified": True})
+        self.hub.publish("gate", {"item": item_id, "clinician": c.name, "gate": gate or item["gate"], "action": action,
+                                  "verified": True, "patient": item.get("patient_id")})
         self.hub.publish("memory", {"patient": item.get("patient_id")})
 
     def _confirm_rule(self, rule_id: str, clinician_id: str, role: str, release: Release | None, _reason: Any) -> None:
@@ -509,74 +505,47 @@ class Session:
         self.board.forget_patient(patient)
         self.companion.forget(patient)
         self.briefer.cases.pop(patient, None)
-        self._panels_shown = {k for k in self._panels_shown if k[0] != patient}
-        self._checks = {k: v for k, v in self._checks.items() if k[0] != patient}
         self.hub.forget(patient)
         self.hub.publish("erased", {"patient": patient})
         return {k: receipt[k] for k in ("subject_hash", "evidence_rows", "knowledge_rows", "blobs_deleted", "complete")}
 
-    # ------------------------------------------------------------------ what the browser shows
-    def board_view(self, patient: str) -> list[dict[str, Any]]:
-        """The Board's items for one patient, in the shape the cards draw. Superseded case packs are left out."""
-        now, out = self.clock.now(), []
-        for i in self.board.items:
-            if i.get("patient_id") != patient or i["status"] == "superseded":
-                continue
-            d = i.get("data") or {}
-            view = {"id": i["id"], "kind": i["kind"], "gate": i["gate"], "title": i["title"], "status": i["status"],
-                    "created": i["created"], "patient": patient, "data": d,
-                    "done_note": i["history"][-1]["note"] if i.get("history") else None}
-            if i["kind"] == "case_pack":
-                view["gates"] = i["required_gates"]
-                view["data"] = {"version": i["version"], "draft": d.get("draft", []), "reviews": i["reviews"],
-                                "sbar": {k: d.get(k) or i["sbar"][k] for k in ("S", "B", "A", "R")}}
-            elif i["kind"] == "rule":
-                state = {"confirmed": "confirmed", "rejected": "rejected"}.get(i["status"], "shadow")
-                view["data"] = {"value": _rule_text(d.get("value")), "key": d.get("key"), "layer": d.get("layer"),
-                                "status": state, "evidence": d.get("evidence_ids", []),
-                                "partition": patient if d.get("layer") == 3 else DEFAULT_HOSPITAL}
-            out.append(for_browser(view, now))
-        return out
-
+    # ------------------------------------------------------------------ what the browser shows (Chrislin's frontend)
     def seat_view(self, seat: str) -> dict[str, Any]:
         manifest = self.desk.registry.get(seat).model_dump(mode="json")
         versions = [m.model_dump(mode="json") for m in self.versions.get(seat, [])]
         return {"id": seat, "manifest": manifest, "versions": versions, "metrics": self.metrics.of(seat),
                 "shadow": seat not in self.rt and seat != "dispatcher"}
 
-    def memory_view(self, patient: str) -> list[dict[str, Any]]:
+    def memory_view(self) -> list[dict[str, Any]]:
+        """Every non-empty partition: each patient's (layer 3) and the hospital's (layer 2), as Cortex keeps them."""
         out = []
-        for layer, partition in ((3, patient), (2, DEFAULT_HOSPITAL)):
-            evidence = [{"ts": e["recorded_at"], "kind": e["kind"], "source": e["source"],
-                         "content_hash": e["content_sha256"], "chain_hash": e["chain_hash"]}
+        for layer, partition in (*((3, p) for p in PATIENTS), (2, DEFAULT_HOSPITAL)):
+            evidence = [{k: v for k, v in e.items() if k not in ("content", "meta")}
                         for e in self.cortex.list_evidence(layer, partition)]
-            knowledge = [{"status": k["status"], "key": k["key"], "value": _rule_text(k["value"]),
-                          "conf": k["confidence"], "conf_effective": k["confidence_effective"], "source": k["source"],
-                          "confirmer": k["decided_by"], "version": k["version"]}
-                         for k in self.cortex.list_knowledge(layer, partition)]
-            out.append({"partition": f"L{layer} · {partition}", "chain": self.cortex.verify_chain(layer, partition),
-                        "evidence": evidence, "knowledge": knowledge})
+            knowledge = self.cortex.list_knowledge(layer, partition)
+            if evidence or knowledge:
+                out.append({"layer": layer, "partition": partition, "chain": self.cortex.verify_chain(layer, partition),
+                            "evidence": evidence, "knowledge": knowledge})
         return out
 
-    def patient_view(self, patient: str) -> dict[str, Any]:
-        return {**self.fhir.patient(patient), "conditions": [c.get("display") for c in self.fhir.conditions(patient)],
-                "medications": [m.get("name") for m in self.fhir.medications(patient)],
-                "lab_photos": [{"id": p["id"], "label": p["label"]} for p in self.lab_photos[patient]]}
-
     def state(self) -> dict[str, Any]:
-        patient = self.active
-        real = real_model_available()
+        from kcd.web import golden
+
+        now = self.clock.now()
         return {
-            "patient": self.patient_view(patient), "active": patient,
-            "patients": [{"id": p, "name": self.fhir.patient(p)["name"]} for p in PATIENTS],
+            "patient": self.active, "patients": golden.patients_view(), "steps": golden.STEPS,
+            "running": self.running[0] if self.running else None,
+            "running_patient": self.running[1] if self.running else None, "light": False,
             "seats": [self.seat_view(s) for s in self.desk.registry.seats() if s != "chief_of_staff"],
-            "board": self.board_view(patient), "memory": self.memory_view(patient), "studies": self.studies(patient),
-            "clinicians": [{"name": c.name, "role": c.role} for c in CLINICIANS],
-            "lang": self.lang, "busy": self.busy, "done_steps": sorted(self.done_steps),
-            "ct_model": {"mode": self.ct_mode, "real_available": real},
-            "models": {"edge": "rules only", "cloud": "disabled"},
-            "config": {"fhir": False, "dicomweb": False, "telegram": False},
-            "edge_report": self.edge_report, "history": list(self.hub.history),
+            "board": [for_browser(i, now) for i in self.board.items], "memory": self.memory_view(),
+            "clinicians": [{"id": c.id, "name": c.name, "role": ROLES[c.role]} for c in CLINICIANS],
+            "history": list(self.hub.history),
+            "integrity": {"audit_chain_ok": self.desk.audit.verify_chain(),
+                          "dead_letters": len(self.desk.bus.dead_letters)},
+            # served for the API and its tests; Chrislin's frontend has no screen for these
+            "studies": self.studies(self.active), "ct_model": {"mode": self.ct_mode,
+                                                               "real_available": real_model_available()},
+            "edge_report": self.edge_report, "busy": self.busy, "lang": self.lang,
         }
 
 

@@ -116,22 +116,20 @@ class WebCompanion(Companion):
 
 
 class WebCaseBriefer(CaseBriefer):
-    """Chrislin's Case Briefer. The browser also shows each verified CT signal and genomic context on its own card,
-    so each new finding goes to `on_finding(patient, kind, payload)`."""
+    """Chrislin's Case Briefer, configured as in her desk: the case pack goes on the Board when it is asked for
+    (golden path step 5), not on every new finding. Its draft wording follows the patient's language."""
 
-    def __init__(self, *, now: Callable[[], Any], language_of: Callable[[str], str],
-                 on_finding: Callable[[str, str, dict[str, Any]], None]):
-        super().__init__(now=now, strict_binding=True, auto_publish=True, auto_genomics=True)
-        self.language_of, self.on_finding = language_of, on_finding
+    def __init__(self, *, now: Callable[[], Any], language_of: Callable[[str], str]):
+        super().__init__(now=now, strict_binding=True)
+        self.language_of = language_of
 
     async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
-        self.draft_lang = self.language_of(env.patient_id)  # the patient's wording, in the patient's language
-        before = self.cases.get(env.patient_id)
-        n = len(before.received) if before is not None and not before.closed else 0
+        self.draft_lang = self.language_of(env.patient_id)
         await super().handle(env, payload, ctx)
-        case = self.cases.get(env.patient_id)
-        if case is not None and len(case.received) > n:
-            self.on_finding(env.patient_id, *case.received[n])
+
+    async def publish_case_pack(self, ctx: SeatContext, *, patient_id: str) -> Any:
+        self.draft_lang = self.language_of(patient_id)
+        return await super().publish_case_pack(ctx, patient_id=patient_id)
 
 
 class _Hooked(list):
