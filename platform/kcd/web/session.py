@@ -340,7 +340,7 @@ class Session:
                 self._real = CallableCtModel("kcd.imaging.chrislin_model:predict")
             self.switch.current = self._real
         elif patient == MARCO:
-            image = next(self.root.glob(f"{MARCO}/*/key.png")).read_bytes()
+            image = (self.root / MARCO / "ct-2026-10-11" / "key.png").read_bytes()  # his study, never an upload
             self.switch.current = _OnlyThisImage(image, FixedCtModel(V1_CACHED, model_version="stub-v1-cached"))
             self.reader.calibration = Calibration(2.5, "stub-v1-cached")
         else:
