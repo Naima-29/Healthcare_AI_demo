@@ -16,7 +16,8 @@ postgres = ["psycopg[binary]>=3.1"]
 # The browser desk (python -m kcd.web)
 web = ["fastapi>=0.162", "starlette>=1.10", "uvicorn>=0.29"]
 # Chrislin's CT model (kcd/imaging/chrislin_model.py). CPU torch: --index-url https://download.pytorch.org/whl/cpu
-ct-model = ["torch>=2.2", "timm>=1.0", "segmentation-models-pytorch>=0.3", "scipy>=1.11"]
+# openvino: optional, about 2x faster on a CPU (kidney finding and classification), same results
+ct-model = ["torch>=2.2", "timm>=1.0", "segmentation-models-pytorch>=0.3", "scipy>=1.11", "openvino>=2024.0"]
 
 [dependency-groups]
 dev = ["pytest>=8", "httpx2>=2"]   # httpx2: what starlette.testclient asks for

@@ -24,8 +24,9 @@ Safety Verifier as a *preliminary signal for radiologist review*, never as a dia
 5. **Calibrate**: temperature scaling, T = 0.798, fitted on cross-validation predictions only.
    `predict()` returns `log(mean P)` as `logits` *before* the temperature; the Imaging Reader's
    `Calibration` applies T once (softmax(log P / T)), the same formula as the notebook's `apply_temperature`.
-6. **Grad-CAM**: last ConvNeXt stage, for the predicted class, averaged over the 5 models, mapped back to the
-   input image's pixels. The notebook's display-only clipping to the kidney mask is not applied.
+6. **Grad-CAM**: last ConvNeXt stage, for the predicted class, from fold model 0 (the notebook averages the 5
+   models; one is 5x faster on a CPU, correlates 0.94-0.99 with the 5-model mean on the 4 test images, and
+   leaves the probabilities unchanged), mapped back to the input image's pixels. The notebook's display-only clipping to the kidney mask is not applied.
 
 ## Performance (Chrislin's held-out test set: 1,638 slices, 27 patient groups)
 
@@ -61,9 +62,21 @@ On Chrislin's 4 test images (`Test Images/` in the Drive folder) the CPU run her
 models agree, and every calibrated probability equal to 3 decimals. `tests/test_chrislin_model.py` checks
 this when the weights are present and skips otherwise.
 
-CPU time (Naima's laptop, torch 2.15.0+cpu, 4 threads): **about 12 s per slice** (median 11.6 s, range
-10-14 s over 8 runs after a warm-up), most of it the 5 Grad-CAM backward passes; loading the six models takes
-about 12 s once per process. The full demo (`python -m kcd.demo --ct-model-callable ...`) takes about 27 s.
+CPU time (Naima's laptop, Intel Core i5-1135G7, 8 threads, torch 2.15.0+cpu, OpenVINO 2026.4), median over 8
+readings of the 4 test images:
+
+| | per slice | loading, once per process |
+|---|---|---|
+| Before: PyTorch, 4 threads, Grad-CAM over 5 models | 5.8 s | 8.9 s, paid by the first reading |
+| PyTorch, all threads, Grad-CAM from 1 model | 3.0 s | 15 s with warm-up |
+| **OpenVINO** (kidney finding + classification) + PyTorch Grad-CAM, all threads | **2.3 s** | 20 s with warm-up |
+
+The web desk loads the model in the background as soon as it is chosen. The first OpenVINO load also converts
+the six networks (about 1 min) and caches them in `models/kidney_project/openvino` (650 MB, fp32). Both engines
+reproduce the notebook's results above; `tests/test_chrislin_model.py` runs every check on each.
+
+Not done, because it would change the probabilities and need re-validation and a new calibration: dropping the
+flip, using fewer than 5 fold models, or int8 / fp16 weights.
 
 ## Getting the weights (not in git)
 

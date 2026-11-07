@@ -9,7 +9,12 @@
   2. segment the kidneys (Phase 2 U-Net, flip-averaged); no kidney found -> error, not a guess
   3. kidney-only, brightness-normalised 320 x 320 crop (Phase 6 masked_norm input)
   4. 5 fold models (convnext_tiny), each flip-averaged; softmax probabilities averaged over the models
-  5. Grad-CAM on the last stage for the predicted class, averaged over the 5 models
+  5. Grad-CAM on the last stage for the predicted class, from fold model 0 (CAM_FOLD)
+
+On a CPU, steps 2 and 4 run on OpenVINO when it is installed (KCD_CT_ENGINE=auto, the default; "torch" or
+"openvino" to force one), in full fp32, with the same results; Grad-CAM needs gradients and stays on PyTorch.
+PyTorch and OpenVINO use every core (KCD_CT_THREADS to limit them). The OpenVINO models are converted from the
+weights once and cached next to them (KCD_CT_CACHE to put them elsewhere).
 
 It returns contract C4 (kcd.imaging.model.prediction_from_dict). The notebook calibrates with
 softmax(log(P_mean) / T), so `logits` here are log(P_mean) *before* the temperature: the Imaging
@@ -18,10 +23,11 @@ probabilities. The heat map is mapped back from the notebook's 384 x 384 frame t
 
 Weights are not in git. Put them under models/kidney_project/ at the repository root (or point
 KCD_CT_MODEL_DIR at a folder with the same layout); see MODEL_CARD_chrislin.md.
-Needs torch, timm and segmentation-models-pytorch; they are imported on first use only.
+Needs torch, timm and segmentation-models-pytorch (openvino optional); they are imported on first use only.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import threading
 from pathlib import Path
@@ -38,7 +44,7 @@ CAVEATS = [
     "Research prototype, not a medical device.",
     "Tumour recall 0.80 (95% CI 0.41-0.93) on only 6 held-out patient groups.",
     "Coronal slices are weaker than axial (balanced accuracy 0.81 vs 0.96).",
-    "The heat map shows the kidney region that drove the score, not the lesion.",
+    "The heat map (from one of the 5 fold models) shows the kidney region that drove the score, not the lesion.",
     "Trained on soft-tissue-window CT slices from one public dataset; other scanners or windows are untested.",
 ]
 
@@ -53,6 +59,8 @@ MASK_FULL_MARGIN, MASK_FEATHER = 0.04, 0.03
 NORM_MEAN, NORM_STD = 110.0, 35.0
 SEG_THRESHOLD = 0.5
 # =====================================================================
+CAM_FOLD = 0  # Grad-CAM from one fold model: 5x faster on a CPU; on the 4 test images it correlates 0.94-0.99
+              # with the 5-model mean, and the probabilities are unchanged (they come before the heat map)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -190,9 +198,18 @@ def to_u8(gray: np.ndarray) -> np.ndarray:
     return np.clip(np.rint(g * 255.0), 0, 255).astype(np.uint8)
 
 
-# ---- torch part, loaded once on first use ----
+# ---- torch / OpenVINO part, loaded once on first use ----
+def _threads() -> int:
+    return max(1, int(os.environ.get("KCD_CT_THREADS") or os.cpu_count() or 4))
+
+
+def _softmax(z: np.ndarray) -> np.ndarray:
+    e = np.exp(z - z.max(axis=1, keepdims=True))
+    return e / e.sum(axis=1, keepdims=True)
+
+
 class _Ensemble:
-    def __init__(self, root: Path, device: str):
+    def __init__(self, root: Path, device: str, engine: str = "auto"):
         import segmentation_models_pytorch as smp
         import timm
         import torch
@@ -200,9 +217,14 @@ class _Ensemble:
         missing = [str(p) for p in weight_paths(root) if not p.is_file()]
         if missing:
             raise FileNotFoundError(f"CT model weights missing (see MODEL_CARD_chrislin.md): {missing}")
+        if engine not in ("auto", "torch", "openvino"):
+            raise ValueError(f"KCD_CT_ENGINE must be auto, torch or openvino, not {engine!r}")
+        if device == "cpu":
+            torch.set_num_threads(_threads())  # PyTorch uses only half the cores by default
         self.torch, self.F, self.dev = torch, torch.nn.functional, device
-        mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+        self._mean = np.array([0.485, 0.456, 0.406], np.float32).reshape(1, 3, 1, 1)
+        self._std = np.array([0.229, 0.224, 0.225], np.float32).reshape(1, 3, 1, 1)
+        mean, std = torch.from_numpy(self._mean).to(device), torch.from_numpy(self._std).to(device)
         self.prep3 = lambda x: (x.repeat(1, 3, 1, 1) - mean) / std
 
         self.seg = smp.Unet("resnet34", encoder_weights=None, in_channels=3, classes=1).to(device)
@@ -213,13 +235,61 @@ class _Ensemble:
             m_ = timm.create_model(ARCH, pretrained=False, num_classes=4, drop_path_rate=0.1)
             m_.load_state_dict(torch.load(p, map_location="cpu"))
             self.models.append(m_.to(device).eval())
+        self.cam_model = self.models[CAM_FOLD]
+
+        has_ov = importlib.util.find_spec("openvino") is not None
+        if engine == "openvino" and not (has_ov and device == "cpu"):
+            raise RuntimeError("KCD_CT_ENGINE=openvino needs the openvino package and KCD_CT_DEVICE=cpu")
+        self.engine = "openvino" if engine != "torch" and has_ov and device == "cpu" else "torch"
+        if self.engine == "openvino":
+            self._ov_seg, self._ov_cls = self._openvino(root)
+            self.seg, self.models = None, []  # only the Grad-CAM model is still needed in PyTorch
+
+    def _openvino(self, root: Path) -> tuple[Any, list[Any]]:
+        import openvino as ov
+
+        torch = self.torch
+        core = ov.Core()
+        cache = Path(os.environ.get("KCD_CT_CACHE") or root / "openvino")
+        cache.mkdir(parents=True, exist_ok=True)
+        # fp32 throughout: OpenVINO would otherwise save fp16 weights and may run bf16 on some CPUs
+        config = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_NUM_THREADS": _threads(),
+                  "INFERENCE_PRECISION_HINT": "f32"}
+
+        def compiled(model: Any, size: int, weights: Path) -> Any:
+            xml = cache / f"{weights.stem}-{size}.xml"
+            if not xml.is_file() or xml.stat().st_mtime < weights.stat().st_mtime:
+                with torch.no_grad():  # torch.export, not the deprecated torch.jit.trace
+                    converted = ov.convert_model(torch.export.export(model, (torch.zeros(2, 3, size, size),)))
+                ov.save_model(converted, str(xml), compress_to_fp16=False)
+            return core.compile_model(str(xml), "CPU", config)
+
+        paths = weight_paths(root)
+        return (compiled(self.seg, PREP_SIZE, paths[0]),
+                [compiled(m, CROP_SIZE, p) for m, p in zip(self.models, paths[1:], strict=True)])
+
+    def _flip_pair(self, gray_u8: np.ndarray) -> np.ndarray:
+        """(2, 3, S, S): the image and its mirror image, normalised like prep3, for one OpenVINO call."""
+        x = gray_u8.astype(np.float32)[None, None] / 255
+        x = np.concatenate([x, x[..., ::-1]])
+        return np.ascontiguousarray((np.repeat(x, 3, axis=1) - self._mean) / self._std, dtype=np.float32)
 
     def segment(self, img384):
+        if self.engine == "openvino":
+            p = 1 / (1 + np.exp(-self._ov_seg(self._flip_pair(img384))[0][:, 0]))
+            return (p[0] + p[1][:, ::-1]) / 2
         torch = self.torch
         with torch.no_grad():
             x = torch.from_numpy(img384.astype(np.float32) / 255)[None, None].to(self.dev)
             p = (torch.sigmoid(self.seg(self.prep3(x))) + torch.sigmoid(self.seg(self.prep3(x.flip(-1)))).flip(-1)) / 2
         return p[0, 0].cpu().numpy()
+
+    def classify(self, X) -> np.ndarray:
+        """(5, 4): each fold model's flip-averaged probabilities, in CLASSES order."""
+        if self.engine == "openvino":
+            pair = self._flip_pair(X)
+            return np.stack([_softmax(m(pair)[0].astype(np.float64)).mean(0) for m in self._ov_cls])
+        return np.stack([self.probs_one(m, X) for m in self.models])
 
     def probs_one(self, model, X):
         torch, F = self.torch, self.F
@@ -253,11 +323,17 @@ class _Ensemble:
         mx = c.flatten(1).max(1)[0].view(-1, 1, 1)
         return (c - mn) / (mx - mn + 1e-8)
 
-    def ensemble_cam(self, X, cls):
+    def cam(self, X, cls):
         torch = self.torch
         xb = torch.from_numpy(X).to(self.dev).float().div(255)[None, None]
-        c = torch.tensor([cls], device=self.dev)
-        return torch.stack([self.gradcam(m, xb, c) for m in self.models]).mean(0)[0].cpu().numpy()
+        return self.gradcam(self.cam_model, xb, torch.tensor([cls], device=self.dev))[0].cpu().numpy()
+
+    def warm_up(self) -> None:
+        """One pass through every network, so the first real reading doesn't pay for the kernels' set-up."""
+        self.segment(np.zeros((PREP_SIZE, PREP_SIZE), np.uint8))
+        X = np.zeros((CROP_SIZE, CROP_SIZE), np.uint8)
+        self.classify(X)
+        self.cam(X, 0)
 
 
 _lock = threading.Lock()
@@ -265,11 +341,20 @@ _ensemble: _Ensemble | None = None
 
 
 def load() -> _Ensemble:
+    """The six networks, loaded and warmed up once per process (about 10-20 s). Call early to avoid the wait."""
     global _ensemble
     with _lock:
         if _ensemble is None:
-            _ensemble = _Ensemble(model_dir(), os.environ.get("KCD_CT_DEVICE", "cpu"))
+            env = os.environ.get
+            ens = _Ensemble(model_dir(), env("KCD_CT_DEVICE", "cpu"), env("KCD_CT_ENGINE", "auto"))
+            ens.warm_up()
+            _ensemble = ens
         return _ensemble
+
+
+def engine() -> str | None:
+    """"openvino" or "torch" once loaded, else None."""
+    return _ensemble.engine if _ensemble is not None else None
 
 
 def analyze_u8(raw: np.ndarray) -> dict[str, Any]:
@@ -280,7 +365,8 @@ def analyze_u8(raw: np.ndarray) -> dict[str, Any]:
     img, body, pad = standardize(raw)
     if (img > 20).mean() < 0.05:
         notes.append("image is almost entirely black after standardization: is this a CT slice?")
-    mask = clean_mask(ens.segment(img) > SEG_THRESHOLD)
+    with _lock:  # one reading at a time: Grad-CAM writes gradients into the shared model
+        mask = clean_mask(ens.segment(img) > SEG_THRESHOLD)
     kfrac = float(mask.mean())
     ncomp = int(ndi.label(mask)[1])
     if kfrac < MIN_KIDNEY_FRAC:
@@ -290,17 +376,17 @@ def analyze_u8(raw: np.ndarray) -> dict[str, Any]:
         notes.append(f"segmentation has {ncomp} separate regions (normally 1-2 kidneys); check the outline")
     X, win = build_model_input(img, mask)
     X = np.array(X)  # writable copy for torch.from_numpy (PIL arrays are read-only); same values
-    with _lock:  # Grad-CAM writes gradients into the shared models
-        P_m = np.stack([ens.probs_one(m, X) for m in ens.models])     # (5, 4) raw per-model probabilities
+    with _lock:
+        P_m = ens.classify(X)                                          # (5, 4) raw per-model probabilities
         P_mean = P_m.mean(0)
         votes = P_m.argmax(1)
         pred = int(P_mean.argmax())  # temperature scaling never changes the arg-max
-        cam384 = place_back(ens.ensemble_cam(X, pred), win)
+        cam384 = place_back(ens.cam(X, pred), win)
     if len(set(votes.tolist())) > 1:
         notes.append("fold models disagree: " + ", ".join(
             f"{CLASSES[v]}x{int((votes == v).sum())}" for v in sorted(set(votes.tolist()))))
     return {"P_models": P_m, "P_mean": P_mean, "pred": CLASSES[pred], "n_models_agree": int((votes == pred).sum()),
-            "kidney_frac": round(kfrac, 4), "n_regions": ncomp, "notes": notes,
+            "kidney_frac": round(kfrac, 4), "n_regions": ncomp, "notes": notes, "engine": ens.engine,
             "heatmap": to_input_frame(cam384, body, pad, raw.shape)}
 
 
@@ -316,5 +402,5 @@ def predict(gray: np.ndarray) -> dict[str, Any]:
         "caveats": list(CAVEATS),
         "warnings": r["notes"],
         "pipeline": {"kidney_frac": r["kidney_frac"], "n_regions": r["n_regions"],
-                     "n_models_agree": r["n_models_agree"]},
+                     "n_models_agree": r["n_models_agree"], "engine": r["engine"]},
     }
