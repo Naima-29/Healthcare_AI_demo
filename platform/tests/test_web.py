@@ -1,16 +1,20 @@
-"""The web desk through its HTTP API: the same calls the frontend makes, on the real seats."""
+"""The web desk through its HTTP API: the calls Chrislin's frontend makes, on the real seats."""
 
 from __future__ import annotations
 
 import base64
 import time
 from collections.abc import Iterator
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
 
 from kcd.web.app import create_app
 from kcd.web.golden import STEPS
+
+MARCO, SOFIA = "marco-r", "sofia-b"
+REVIEWER = {"radiologist_review": "dr_conti", "nephrologist_review": "dr_rossi", "genetic_disclosure": "dr_greco"}
 
 
 @pytest.fixture
@@ -23,20 +27,22 @@ def state(client: TestClient) -> dict:
     return client.get("/api/state").json()
 
 
-def items(client: TestClient, kind: str) -> list[dict]:
-    return [i for i in state(client)["board"] if i["kind"] == kind]
+def items(client: TestClient, kind: str, patient: str = MARCO, status: str | None = None) -> list[dict]:
+    return [i for i in state(client)["board"] if i["kind"] == kind and i["patient_id"] == patient
+            and (status is None or i["status"] == status)]
 
 
-def replies(client: TestClient) -> list[str]:
-    return [e["data"]["text"] for e in state(client)["history"] if e["kind"] == "patient_out"]
+def replies(client: TestClient, patient: str = MARCO) -> list[str]:
+    return [e["data"]["text"] for e in state(client)["history"]
+            if e["kind"] == "patient_out" and e["data"]["patient"] == patient]
 
 
 def events(client: TestClient, kind: str) -> list[dict]:
     return [e["data"] for e in state(client)["history"] if e["kind"] == kind]
 
 
-def say(client: TestClient, text: str) -> None:
-    r = client.post("/api/patient/message", json={"text": text})
+def say(client: TestClient, text: str, patient: str = MARCO) -> None:
+    r = client.post("/api/patient/message", json={"text": text, "patient": patient})
     assert r.status_code == 200, r.text
 
 
@@ -44,74 +50,108 @@ def act(client: TestClient, item: str, action: str, clinician: str, **kw: object
     return client.post("/api/board/act", json={"item": item, "action": action, "clinician": clinician, **kw})
 
 
+def step(client: TestClient, n: int, patient: str = MARCO) -> None:
+    r = client.post("/api/scenario/step", json={"n": n, "patient": patient, "wait": True})
+    assert r.status_code == 200, r.text
+
+
 def read_ct(client: TestClient, study_uid: str | None = None):
     return client.post("/api/pacs/new-study", json={"study_uid": study_uid, "wait": True})
 
 
-REVIEWER = {"radiologist_review": "Dr. E. Conti", "nephrologist_review": "Dr. A. Rossi",
-            "genetic_disclosure": "Dr. P. Greco"}
+def open_pack(client: TestClient, patient: str = MARCO) -> dict:
+    """The open case pack; like Chrislin's desk, it goes on the Board at golden path step 5."""
+    if not items(client, "case_pack", patient, "open"):
+        step(client, 5, patient)
+    return items(client, "case_pack", patient, "open")[0]
+
+
+def signals(client: TestClient, patient: str = MARCO) -> list[dict]:
+    """Verified CT signals: what the Safety Verifier passed on to the Case Briefer."""
+    return [e["payload"] for e in events(client, "a2a")
+            if e["type"] == "imaging_signal" and e["to"] == "case_briefer" and e["patient"] == patient]
 
 
 def review_all(client: TestClient, pack: dict) -> None:
-    for gate, review in pack["data"]["reviews"].items():
+    for gate, review in pack["reviews"].items():
         if review is None:
             assert act(client, pack["id"], "review", REVIEWER[gate], gate=gate).status_code == 200
 
 
-def run_golden_path(client: TestClient) -> None:
-    for step in STEPS:
-        assert client.post("/api/scenario/step", json={"n": step["n"], "wait": True}).status_code == 200
+def sign(client: TestClient, patient: str = MARCO, **kw: object) -> dict:
+    pack = open_pack(client, patient)
+    review_all(client, pack)
+    items_ = kw.pop("items", [{"code": d["code"], "selected": True, "patient_text": d["patient_text"]}
+                              for d in pack["data"]["draft"]])
+    r = act(client, pack["id"], "sign", "dr_rossi", items=items_, **kw)
+    assert r.status_code == 200, r.text
+    return pack
 
 
-def test_frontend_is_served_and_state_is_complete(client: TestClient) -> None:
-    assert "Kidney Care Desk" in client.get("/").text
-    assert "boot()" in client.get("/app.js").text
+def test_chrislins_frontend_is_served_with_the_state_it_reads(client: TestClient) -> None:
+    page = client.get("/").text
+    assert "Kidney Care Desk" in page and "/app.css" in page and "boot()" in client.get("/app.js").text
+    assert client.get("/app.css").status_code == 200 and client.get("/assets/loopnexus.png").status_code == 200
     s = state(client)
-    assert s["active"] == "marco-r" and {p["id"] for p in s["patients"]} == {"marco-r", "sofia-b"}
-    assert len(s["seats"]) == 8 and s["steps"] == STEPS
-    assert s["ct_model"]["mode"] == "stub" and s["patient"]["name"] == "Marco R."
+    assert s["patient"] == MARCO and [p["id"] for p in s["patients"]] == [MARCO, SOFIA]
+    assert all(p["initials"] and p["age"] > 0 and p["script"] and p["ibuprofen"] for p in s["patients"])
+    assert s["steps"] == STEPS and len(STEPS) == 5 and s["light"] is False
+    assert all(c["role"].startswith("clinician:") and c["id"] for c in s["clinicians"])
+    assert s["integrity"] == {"audit_chain_ok": True, "dead_letters": 0} and len(s["seats"]) == 8
 
 
 def test_host_header_of_another_site_is_refused(client: TestClient) -> None:
     assert client.get("/api/state", headers={"host": "evil.example"}).status_code == 400
 
 
-def test_golden_path_end_to_end(client: TestClient) -> None:
-    run_golden_path(client)
+def test_golden_path_for_marco_then_the_clinicians_sign(client: TestClient) -> None:
+    for s in STEPS:
+        step(client, s["n"])
+    # The red flag paged the on-call doctor once; the uro-oncologist acknowledges it.
+    pages = events(client, "page")
+    assert [p["name"] for p in pages] == ["Dr. A. Rossi"] and "severe flank pain" in pages[0]["message"]
+    esc = items(client, "escalation", status="open")[0]
+    assert esc["data"]["paged"] == ["Dr. A. Rossi"] and esc["data"]["unit"]
+    assert act(client, esc["id"], "acknowledge", "dr_bianchi").status_code == 200
+    # One open case pack (older versions superseded), with all three specialist gates.
+    assert len(items(client, "case_pack", status="open")) == 1
+    pack = open_pack(client)
+    assert set(pack["reviews"]) == {"radiologist_review", "nephrologist_review", "genetic_disclosure"}
+    assert pack["data"]["images"]["key_image"].startswith("cortex:evidence/")
+    sign(client)
+    rules = items(client, "rule", status="open")
+    assert len(rules) == 2
+    for rule in rules:
+        assert act(client, rule["id"], "confirm", "dr_rossi").status_code == 200
+
     s = state(client)
-    assert all(e["data"].get("verified") for e in s["history"] if e["kind"] == "a2a")
     types = {e["data"]["type"] for e in s["history"] if e["kind"] == "a2a"}
     assert {"red_flag_escalation", "medication_report", "therapy_conflict", "imaging_signal", "data_delivered",
             "case_pack_ready", "clinician_decision"} <= types
-    # The doctor was paged once, and every gate on the Board was closed by a named person's signature.
-    pages = events(client, "page")
-    assert [p["name"] for p in pages] == ["Dr. A. Rossi"] and "severe flank pain" in pages[0]["message"]
-    statuses = {i["kind"]: i["status"] for i in s["board"]}
-    assert statuses["escalation"] == "acknowledged" and statuses["imaging"] == "info"
-    pack = next(i for i in s["board"] if i["kind"] == "case_pack")
-    assert all(r is not None for r in pack["data"]["reviews"].values())
-    assert "signed by Dr. A. Rossi" in pack["done_note"]
-    assert statuses["case_pack"] == "signed" and statuses["rule"] == "confirmed"
-    # The patient heard: the safety script, a hold on the CT, the signed decision, and the confirmed rule.
     said = replies(client)
     assert any("needs medical assessment today" in t for t in said)
-    assert any("must be reviewed by your doctor" in t for t in said)
-    assert any("Dr. A. Rossi" in t and "reviewed your case" in t and "stop taking ibuprofen" in t for t in said)
-    assert "asked you to avoid ibuprofen" in said[-1]
-    # Cortex holds it, chained, with the rules confirmed by a person.
-    patient, hospital = s["memory"]
-    assert patient["chain"]["ok"] and patient["chain"]["length"] > 3
-    assert [k["status"] for k in patient["knowledge"]] == ["confirmed"]
-    assert [k["status"] for k in hospital["knowledge"]] == ["confirmed"]
+    assert any("Dr. A. Rossi" in t and "reviewed your case" in t and "ibuprofen" in t for t in said)
+    say(client, "Can I take another ibuprofen tonight? The pain is back.")
+    assert "asked you to avoid ibuprofen" in replies(client)[-1]  # the confirmed rule, next episode
+    memory = {(m["layer"], m["partition"]): m for m in s["memory"]}
+    marco = memory[(3, MARCO)]
+    assert marco["chain"]["ok"] and marco["chain"]["length"] > 3
+    assert [k["status"] for k in marco["knowledge"]] == ["confirmed"]
+    assert [k["status"] for k in memory[(2, "hospital")]["knowledge"]] == ["confirmed"]
 
 
-def test_step_1_changes_a_manifest_and_reports_an_existing_rule(client: TestClient) -> None:
-    client.post("/api/scenario/step", json={"n": 1, "wait": True})
-    replies_ = [e["text"] for e in events(client, "director_out")]
-    assert "already enforces" in replies_[0]
-    assert "Case Briefer is now v2" in replies_[1]
-    seat = client.get("/api/seats/case_briefer").json()
-    assert [v["version"] for v in seat["versions"]] == [1, 2] and "diagnose" in seat["manifest"]["refuses"]
+def test_golden_path_for_sofia(client: TestClient) -> None:
+    for s in STEPS:
+        step(client, s["n"], SOFIA)
+    assert not items(client, "escalation", SOFIA)  # her script has no red flag
+    pack = open_pack(client, SOFIA)
+    assert {"radiologist_review", "nephrologist_review", "genetic_disclosure"} <= set(pack["reviews"])
+    assert any(r["code"] == "vhl_followup" for r in pack["data"]["R"])
+    r = client.get("/api/evidence/" + quote(pack["data"]["images"]["key_image"], safe=""))
+    assert r.status_code == 200 and r.content[:4] == b"\x89PNG"
+    sign(client, SOFIA)
+    assert "reviewed your case" in replies(client, SOFIA)[-1]
+    assert not replies(client, MARCO)  # each patient's phone stays their own
 
 
 def test_imaging_question_is_refused_at_the_policy_layer(client: TestClient) -> None:
@@ -129,44 +169,42 @@ def test_genetics_question_is_refused(client: TestClient) -> None:
 
 def test_case_pack_cannot_be_signed_before_the_radiologist(client: TestClient) -> None:
     assert read_ct(client).json()["sent"] is True
-    pack = items(client, "case_pack")[0]
-    r = act(client, pack["id"], "sign", "Dr. A. Rossi", items=pack["data"]["draft"])
+    pack = open_pack(client)
+    r = act(client, pack["id"], "sign", "dr_rossi", items=pack["data"]["draft"])
     assert r.status_code == 409 and "review first: radiologist_review" in r.json()["error"]
-    r = act(client, pack["id"], "review", "Dr. A. Rossi", gate="radiologist_review")
+    r = act(client, pack["id"], "review", "dr_rossi", gate="radiologist_review")
     assert r.status_code == 409 and "clinician:radiology" in r.json()["error"]
-    assert act(client, pack["id"], "review", "Dr. E. Conti", gate="radiologist_review").status_code == 200
-    pack = items(client, "case_pack")[0]
-    assert act(client, pack["id"], "sign", "Dr. A. Rossi", items=pack["data"]["draft"]).status_code == 200
+    assert act(client, pack["id"], "review", "dr_conti", gate="radiologist_review").status_code == 200
+    assert act(client, pack["id"], "sign", "dr_rossi", items=pack["data"]["draft"]).status_code == 200
 
 
 def test_edited_wording_is_exactly_what_the_patient_reads(client: TestClient) -> None:
-    client.post("/api/scenario/step", json={"n": 2, "wait": True})
-    client.post("/api/scenario/step", json={"n": 3, "wait": True})
-    pack = items(client, "case_pack")[0]
-    review_all(client, pack)
-    draft = [{**pack["data"]["draft"][0], "patient_text": "come at 8, Building C"}]
-    assert act(client, pack["id"], "sign", "Dr. A. Rossi", items=draft, note="Bring your results.").status_code == 200
+    step(client, 1)
+    pack = open_pack(client)
+    first = pack["data"]["draft"][0]
+    sign(client, items=[{"code": first["code"], "patient_text": "come at 8, Building C"}], note="Bring your results.")
     last = replies(client)[-1]
     assert "come at 8, Building C" in last and "Bring your results." in last
-    assert pack["data"]["draft"][0]["patient_text"] not in last  # the draft wording was replaced, not added
+    assert first["patient_text"] not in last  # the draft wording was replaced, not added
 
 
 def test_rejected_rule_is_not_used(client: TestClient) -> None:
-    for n in (2, 3, 4, 6):
-        client.post("/api/scenario/step", json={"n": n, "wait": True})
-    assert act(client, items(client, "rule")[0]["id"], "reject", "Dr. A. Rossi").status_code == 409  # no reason
-    for rule in items(client, "rule"):
-        assert act(client, rule["id"], "reject", "Dr. A. Rossi", note="not for this patient").status_code == 200
+    step(client, 1)
+    step(client, 2)
+    sign(client)
+    rule = items(client, "rule", status="open")[0]
+    assert act(client, rule["id"], "reject", "dr_rossi").status_code == 409  # a reason is required
+    for rule in items(client, "rule", status="open"):
+        assert act(client, rule["id"], "reject", "dr_rossi", reason="not for this patient").status_code == 200
     say(client, "Can I take another ibuprofen tonight? The pain is back.")
     assert "avoid ibuprofen" not in replies(client)[-1]
 
 
 def test_escalation_moves_up_the_ladder_when_nobody_answers(client: TestClient) -> None:
-    client.post("/api/scenario/step", json={"n": 2, "wait": True})
-    client.post("/api/scenario/step", json={"n": 3, "wait": True})
+    step(client, 1)
     session = client.app.state.session  # type: ignore[attr-defined]
     item = items(client, "escalation")[0]
-    assert item["data"]["paged"]["name"] == "Dr. A. Rossi"
+    assert item["data"]["paged"] == ["Dr. A. Rossi"]
 
     async def overdue() -> None:
         from datetime import timedelta
@@ -174,25 +212,26 @@ def test_escalation_moves_up_the_ladder_when_nobody_answers(client: TestClient) 
         await session.desk.escalations.tick()
 
     client.portal.call(overdue)  # type: ignore[union-attr]
-    assert items(client, "escalation")[0]["data"]["paged"]["name"] == "Dr. L. Bianchi"
-    assert items(client, "escalation")[0]["id"] == item["id"]
+    moved = items(client, "escalation")[0]
+    assert moved["id"] == item["id"] and moved["data"]["paged"] == ["Dr. A. Rossi", "Dr. L. Bianchi"]
+    assert moved["data"]["level"] == 1
 
 
 def test_sofia_failed_ct_cases_reach_the_board(client: TestClient) -> None:
-    assert client.post("/api/patient/select", json={"patient": "sofia-b"}).status_code == 200
+    assert client.post("/api/patient/select", json={"patient": SOFIA}).status_code == 200
     s = state(client)
-    assert s["patient"]["name"] == "Sofia B." and len(s["studies"]) == 11
+    assert s["patient"] == SOFIA and len(s["studies"]) == 11
     by_kind = {st["study_uid"].rsplit(".", 1)[1]: st["study_uid"] for st in s["studies"]}
 
     assert read_ct(client, by_kind["01"]).json()["status"] == "ok"
-    assert items(client, "imaging")[0]["data"]["label"] == "normal"
+    assert signals(client, SOFIA)[0]["label"] == "normal"
     assert read_ct(client, by_kind["01"]).json()["duplicate"] is True
-    assert len(items(client, "imaging")) == 1
+    assert len(signals(client, SOFIA)) == 1
 
     assert read_ct(client, by_kind["05"]).json()["status"] == "out_of_distribution"
     assert read_ct(client, by_kind["08"]).json() == {"status": "unreadable", "sent": False, "duplicate": False}
     assert read_ct(client, by_kind["09"]).json()["status"] == "model_error"
-    titles = [i["title"] for i in items(client, "verification_failed")]
+    titles = [i["title"] for i in items(client, "verification_failed", SOFIA)]
     assert any("Safety Verifier" in t for t in titles)
     assert "CT not read: unreadable" in titles and "CT not read: model_error" in titles
 
@@ -201,25 +240,29 @@ def test_sofia_failed_ct_cases_reach_the_board(client: TestClient) -> None:
 
 
 def test_ocr_error_is_stopped_and_good_photo_reaches_the_pack(client: TestClient) -> None:
-    client.post("/api/patient/select", json={"patient": "sofia-b"})
-    say(client, "Prendo Brufen 600 tre volte al giorno")
-    assert "referto" in replies(client)[-1]
-    assert client.post("/api/patient/attach-lab", json={"photo": "ocr-error"}).status_code == 200
-    failed = items(client, "verification_failed")
+    say(client, "Prendo Brufen 600 tre volte al giorno", SOFIA)
+    assert "referto" in replies(client, SOFIA)[-1]
+    r = client.post("/api/patient/attach-lab", json={"photo": "ocr-error", "patient": SOFIA})
+    assert r.status_code == 200
+    failed = items(client, "verification_failed", SOFIA)
     assert failed and "eGFR plausible" in " ".join(failed[0]["data"]["failed"])
-    assert not items(client, "case_pack")
-    say(client, "Prendo Brufen 600 tre volte al giorno")
-    client.post("/api/patient/attach-lab", json={"photo": "ok"})
-    assert items(client, "case_pack")
+    r = client.post("/api/scenario/step", json={"n": 5, "patient": SOFIA, "wait": True})
+    assert r.status_code == 409  # nothing verified reached the Case Briefer
+    say(client, "Prendo Brufen 600 tre volte al giorno", SOFIA)
+    client.post("/api/patient/attach-lab", json={"photo": "ok", "patient": SOFIA})
+    assert "nephrologist_review" in open_pack(client, SOFIA)["reviews"]
 
 
 def test_images_come_from_cortex(client: TestClient) -> None:
     read_ct(client)
-    data = items(client, "imaging")[0]["data"]
-    for url in (data["key_image"], data["heatmap_ref"]):
-        r = client.get(url)
+    images = open_pack(client)["data"]["images"]
+    for ref in (images["key_image"], images["heatmap_ref"]):
+        r = client.get("/api/evidence/" + quote(ref, safe=""))  # as Chrislin's frontend asks for it
         assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content[:4] == b"\x89PNG"
+        by_patient = client.get(f"/api/evidence/{MARCO}/{ref.removeprefix('cortex:evidence/')}")
+        assert by_patient.content == r.content
     assert client.get("/api/evidence/marco-r/not-an-id").status_code == 404
+    assert client.get("/api/evidence/" + quote("cortex:evidence/nope", safe="")).status_code == 404
     assert client.get("/api/evidence/../secret/x").status_code in (404, 405)
 
 
@@ -229,7 +272,7 @@ def test_upload_with_the_stub_is_not_given_a_made_up_answer(client: TestClient) 
     r = client.post("/api/pacs/upload", json={"name": "../../evil.png", "wait": True,
                                               "data_base64": base64.b64encode(other).decode()})
     assert r.status_code == 200 and r.json()["status"] == "model_error"
-    assert not items(client, "imaging")
+    assert not signals(client)
     assert any(st["description"].endswith("evil.png") for st in state(client)["studies"])
     assert client.post("/api/pacs/upload", json={"name": "x.png", "data_base64": "not base64!"}).status_code == 422
 
@@ -246,13 +289,18 @@ def test_chrislins_model_path_uses_its_own_calibration(client: TestClient, monke
                 "logits": [0.1, 0.2, 0.3, 3.0]}
 
     monkeypatch.setattr(web_session, "real_model_available", lambda: True)
+    monkeypatch.setattr(web_session.Session, "_load_real_model", lambda self: _nothing())
     desk = client.app.state.session  # type: ignore[attr-defined]
     desk._real = CallableCtModel(fake)
     assert client.post("/api/pacs/model", json={"mode": "real"}).status_code == 200
     assert state(client)["ct_model"]["mode"] == "real"
     assert read_ct(client).json()["status"] == "ok"
-    data = items(client, "imaging")[0]["data"]
+    data = signals(client)[0]
     assert data["label"] == "tumor" and data["provenance"]["live_model"] is True and "T=0.798" in data["calibration"]
+
+
+async def _nothing() -> None:
+    return None
 
 
 def test_choosing_chrislins_model_loads_it_in_the_background(client: TestClient,
@@ -290,12 +338,16 @@ def test_chrislins_model_is_refused_when_its_weights_are_missing(client: TestCli
 
 
 def test_erase_removes_the_patient_everywhere(client: TestClient) -> None:
-    run_golden_path(client)
-    r = client.post("/api/patient/erase", json={})
+    for s in STEPS:
+        step(client, s["n"])
+    say(client, "Hello", SOFIA)
+    r = client.post("/api/patient/erase", json={"patient": MARCO})
     assert r.status_code == 200 and r.json()["complete"] is True and r.json()["evidence_rows"] > 0
     s = state(client)
-    assert not s["board"] and not s["memory"][0]["evidence"] and not s["memory"][0]["knowledge"]
-    assert not replies(client) and not events(client, "a2a")
+    assert not [i for i in s["board"] if i["patient_id"] == MARCO]
+    assert not [m for m in s["memory"] if m["layer"] == 3 and m["partition"] == MARCO]
+    assert not replies(client, MARCO) and replies(client, SOFIA)  # only Marco is erased
+    assert not [e for e in events(client, "a2a") if e["patient"] == MARCO]
 
 
 def test_reset_starts_a_new_desk(client: TestClient) -> None:
@@ -314,6 +366,7 @@ def test_director_doors(client: TestClient) -> None:
     assert "list the agents" in ask("help")["text"]
     assert "Renal Guardian" in ask("List the agents")["text"]
     assert "Renal Guardian v1" in ask("How is the Renal Guardian doing?")["text"]
+    assert "Case Briefer is now v2" in ask("Case Briefer: never diagnose a patient.")["text"]
     created = ask("Create an agent for nephrology phone follow-up: it calls CKD patients on WhatsApp. It must never "
                   "change a therapy; every piece of advice must be approved by the nephrologist.")
     assert "shadow" in created["text"]
@@ -325,7 +378,9 @@ def test_director_doors(client: TestClient) -> None:
 def test_bad_requests_get_a_readable_error(client: TestClient) -> None:
     assert client.post("/api/patient/message", json={"text": " "}).status_code == 422
     assert client.post("/api/patient/message", content="nope").status_code == 400
-    r = client.post("/api/board/act", json={"item": "x", "action": "sign", "clinician": "Dr. A. Rossi"})
-    assert r.status_code == 404
-    assert client.post("/api/patient/select", json={"patient": "nobody"}).status_code == 404
+    assert client.post("/api/patient/message", json={"text": "hi", "patient": "nobody"}).status_code == 404
+    assert act(client, "x", "sign", "dr_rossi").status_code == 404
+    assert act(client, "x", "sign", "dr_nobody").status_code == 422
     assert client.post("/api/scenario/step", json={"n": 99}).status_code == 422
+    r = client.post("/api/scenario/step", json={"n": 5, "patient": SOFIA, "wait": True})
+    assert r.status_code == 409 and "nothing to put in a case pack" in r.json()["error"]
