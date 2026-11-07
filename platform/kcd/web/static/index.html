@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kidney Care Desk · Loop AI Labs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div class="app">
+    <nav class="rail" id="tabs" aria-label="Views"></nav>
+
+    <header class="top">
+      <div>
+        <div class="product">Kidney Care Desk</div>
+        <div class="sub">Synthetic demo, not a medical device</div>
+      </div>
+      <div class="patients" id="patients" role="tablist" aria-label="Patient"></div>
+      <div class="status" id="status"></div>
+    </header>
+
+    <section class="runbar">
+      <div class="steps" id="golden"></div>
+      <div class="actions"><button class="btn primary" id="autoplay">▶ Autoplay</button><button class="btn ghost" id="reset">Reset</button></div>
+      <div class="next" id="next"></div>
+    </section>
+
+    <main id="main">
+      <section class="view active" id="view-stage">
+        <div class="stage">
+          <div class="col phone-col"><div class="door">Patient <small>talks only to the Companion</small></div><div data-mount="phone"></div></div>
+          <div class="col mid-col"><div class="mid">
+            <div class="door internal">The desk <small>every message is signed and routed by the Dispatcher</small></div>
+            <div data-mount="map"></div>
+            <div data-mount="stream" class="stream-mini"></div>
+          </div></div>
+          <div class="col board-col"><div class="door clinician">Clinical Board <small>nothing reaches the patient without a signature</small></div><div data-mount="board"></div></div>
+        </div>
+      </section>
+      <section class="view" id="view-patient"><div class="single center"><div class="door">Patient <small>talks only to the Companion</small></div><div data-mount="phone" style="width:100%"></div></div></section>
+      <section class="view" id="view-board"><div class="single"><div class="pagehead"><h2>Clinical Board</h2><p>Everything that needs a clinician: urgent alerts, case packs and rules to confirm. Your signature is what releases anything to the patient.</p></div><div data-mount="board" class="board-full"></div></div></section>
+      <section class="view" id="view-director"><div class="single"><div class="pagehead"><h2>Chief of Staff</h2></div>
+        <div class="notice">This door is not connected in the Python desk yet. The Chief of Staff turns a plain-language job description into a validated manifest, shows the diff and hot-reloads it. It is specified in the plan but is not a running seat in <code>kcd_core</code> yet. The Roster and Agent page show the live manifests it will edit.</div></div></section>
+      <section class="view" id="view-roster"><div class="single" id="roster"></div></section>
+      <section class="view" id="view-agent"><div class="single" id="agent"></div></section>
+      <section class="view" id="view-stream"><div class="single"><div class="pagehead"><h2>Message flow</h2><p>Every message between seats goes through the Dispatcher, signed with Ed25519 and checked against the sender’s manifest.</p></div><div data-mount="map"></div><div data-mount="stream" class="stream-full" style="margin-top:12px"></div></div></section>
+      <section class="view" id="view-memory"><div class="single" id="memory"></div></section>
+    </main>
+  </div>
+  <div id="toast" role="status"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -7,8 +7,10 @@ end to end; the dispatcher does not re-sign, so receivers can verify who really 
 
 from __future__ import annotations
 
-from typing import Protocol
+import hashlib
+from typing import Any, Protocol
 
+import rfc8785
 from pydantic import ValidationError
 
 from .audit import AuditSink
@@ -19,6 +21,12 @@ from .contracts.messages import CasePackReady, RedFlagEscalation
 from .escalation import EscalationService
 from .registry import DISPATCHER, ManifestRegistry, RoutingError
 from .signing import KeyRing, SignatureError, verify_envelope
+
+
+def escalation_key(env: Envelope) -> str:
+    """Same sender, episode and red flag -> same escalation, whichever seat the copy is addressed to."""
+    body: dict[str, Any] = {"f": env.from_, "e": env.episode_id, "p": env.payload}
+    return "escalation:sha256:" + hashlib.sha256(rfc8785.dumps(body)).hexdigest()
 
 
 class IdempotencyStore(Protocol):
@@ -85,8 +93,15 @@ class Dispatcher:
             return
 
         if isinstance(payload, RedFlagEscalation):
-            esc = await self.escalations.open(env, unit=payload.unit or self.default_unit)
-            self._audit(env, "dispatch.escalation_opened", "info", {"escalation_id": esc.id})
+            # One red flag fanned out to several seats (case_briefer, archivist) is one emergency: open one
+            # escalation and page once. The key leaves out the receiver; the message key does not.
+            esc_key = escalation_key(env)
+            if self.idempotency.has(esc_key):
+                self._audit(env, "dispatch.escalation_already_open", "info")
+            else:
+                esc = await self.escalations.open(env, unit=payload.unit or self.default_unit)
+                self.idempotency.mark(esc_key)
+                self._audit(env, "dispatch.escalation_opened", "info", {"escalation_id": esc.id})
 
         if env.to == DISPATCHER:
             await self._consume(env)

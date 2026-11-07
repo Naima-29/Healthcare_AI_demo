@@ -13,9 +13,14 @@ dependencies = [
 [project.optional-dependencies]
 dicom = ["pydicom>=2.4"]
 postgres = ["psycopg[binary]>=3.1"]
+# Chrislin's CT model (kcd/imaging/chrislin_model.py). CPU torch: --index-url https://download.pytorch.org/whl/cpu
+ct-model = ["torch>=2.2", "timm>=1.0", "segmentation-models-pytorch>=0.3", "scipy>=1.11"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
+
+[tool.uv.sources]
+kcd-core = { path = "..", editable = true }
 
 [tool.ruff]
 extend = "../pyproject.toml"    # same lint rules as Core

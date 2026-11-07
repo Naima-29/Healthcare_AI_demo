@@ -22,10 +22,13 @@ from kcd_core.contracts.messages import (
     DataDelivered,
     DataRequest,
     DecisionItem,
+    Distress,
     ImagingSignal,
     MedicationReport,
     RedFlagEscalation,
     Sbar,
+    Symptom,
+    SymptomReport,
     TherapyConflict,
 )
 from kcd_core.pep import PolicyViolation
@@ -74,6 +77,16 @@ class StandInCompanion(Seat):
         for to in ("case_briefer", "archivist"):
             await ctx.send(MessageType.RED_FLAG_ESCALATION, to, payload, patient_id=patient_id, episode_id=episode_id)
 
+    async def report_symptoms(self, ctx: SeatContext, *, patient_id: str, episode_id: str,
+                              symptoms: list[dict[str, Any]], distress: float, transcript: str) -> None:
+        """Non-urgent findings go to the care team as a symptom report (no paging), as in the demo."""
+        level = "high" if distress >= 0.7 else "moderate" if distress >= 0.4 else "low"
+        await ctx.send(MessageType.SYMPTOM_REPORT, "case_briefer",
+                       SymptomReport(symptoms=[Symptom(**s) for s in symptoms],
+                                     distress=Distress(score=distress, level=level), transcript=transcript,
+                                     channel="telegram"),
+                       patient_id=patient_id, episode_id=episode_id)
+
 
 @dataclass
 class _Case:
@@ -99,7 +112,7 @@ class StandInCaseBriefer(Seat):
         return self.cases[patient_id]
 
     async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
-        if isinstance(payload, ImagingSignal | TherapyConflict | DataDelivered | RedFlagEscalation):
+        if isinstance(payload, ImagingSignal | TherapyConflict | DataDelivered | RedFlagEscalation | SymptomReport):
             self.case(env.patient_id, env.episode_id).received.append(
                 (str(env.type), payload.model_dump(mode="json", by_alias=True)))
 
@@ -159,6 +172,9 @@ def _sbar(received: list[tuple[str, dict[str, Any]]]) -> Sbar:
     for kind, p in received:
         if kind == "red_flag_escalation":
             s.append(f"Red flag at home ({p['urgency']}): {p['pattern']}.")
+        elif kind == "symptom_report":
+            s.append("Reported at home: " + ", ".join(x["label"] for x in p["symptoms"])
+                     + f" (distress {p['distress']['level']}).")
         elif kind == "therapy_conflict":
             a.append(f"Drug-disease conflict ({p['severity']}): {p['drug']} with {', '.join(p['conditions'])}.")
             r.append("Review the analgesic; consider stopping the NSAID (nephrologist).")

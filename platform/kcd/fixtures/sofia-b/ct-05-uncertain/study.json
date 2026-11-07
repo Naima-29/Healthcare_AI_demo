@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.05",
+  "modality": "CT",
+  "acquired": "2026-04-10T09:00:00Z",
+  "description": "Synthetic: model unsure (out of distribution)",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}
