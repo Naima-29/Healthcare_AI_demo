@@ -95,15 +95,21 @@ async def run_step(session: Session, n: int, *, pace: float = 0.7) -> None:
     session.hub.publish("scenario", {"op": "done", "n": n})
 
 
+REVIEWER = {"radiologist_review": "Dr. E. Conti", "nephrologist_review": "Dr. A. Rossi",
+            "genetic_disclosure": "Dr. P. Greco"}
+
+
 def _open(session: Session, kind: str) -> list[dict[str, Any]]:
-    return [i for i in session.board.items if i["patient"] == MARCO and i["kind"] == kind and i["status"] == "open"]
+    return [i for i in session.board_view(MARCO) if i["kind"] == kind and i["status"] == "open"]
 
 
 async def _sign_off(session: Session, pace: float) -> None:
     for item in _open(session, "escalation"):
         await session.board_act(item["id"], "acknowledge", item["data"]["paged"]["name"])
-    for item in _open(session, "imaging"):
-        await session.board_act(item["id"], "review", "Dr. E. Conti")
+    for item in _open(session, "case_pack"):
+        for gate, review in item["data"]["reviews"].items():
+            if review is None:
+                await session.board_act(item["id"], "review", REVIEWER[gate], gate=gate)
     await asyncio.sleep(pace)
     for item in _open(session, "case_pack"):
         await session.board_act(item["id"], "sign", "Dr. A. Rossi", items=item["data"]["draft"])

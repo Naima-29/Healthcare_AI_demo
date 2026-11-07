@@ -49,11 +49,12 @@ from kcd.imaging.model import CtModel, CtModelError, CtPrediction, prediction_fr
 from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
 from kcd.seats.archivist import Archivist
+from kcd.seats.case_briefer import CaseBriefer
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader, NoStudy
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.seats.safety_verifier import SafetyVerifier
-from kcd.standins import StandInCaseBriefer, StandInCompanion
+from kcd.standins import StandInCompanion
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 from kcd.util import sha256_hex
 
@@ -113,7 +114,7 @@ class EdgeCases:
         self.cortex = Cortex(human_verifier=release_verifier(self.desk.clinician_keys), clock=self.desk.clock.now)
         fhir = FolderFhir(self.root)
         self.companion = StandInCompanion(self.km, lab_reports={PATIENT: self.lab["lab-photo-ok.json"]})
-        self.briefer = StandInCaseBriefer()
+        self.briefer = CaseBriefer()
         self.reader = ImagingReader(self.cortex, self.calibration, audit=self.desk.audit, clock=self.desk.clock)
         self.verifier = SafetyVerifier(now=self.desk.clock.now)
         self.archivist = Archivist(self.cortex)

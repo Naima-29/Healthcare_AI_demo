@@ -1,8 +1,8 @@
 """One running desk: every seat on kcd_core, two synthetic patients and the Clinical Board, for the web server.
 
 Real: Dispatcher + escalation, Companion, Renal Guardian, Safety Verifier, Knowledge Model, Imaging Reader, Genomics
-Interpreter, Archivist, Cortex, the Chief of Staff's compiler and, on request, Chrislin's CT model.
-Stand-in: Case Briefer (kcd/web/seats.py). Everything lives in memory and in a temporary folder:
+Interpreter, Archivist, Cortex, Case Briefer and Clinical Board, the Chief of Staff's compiler and, on request,
+Chrislin's CT model. No stand-in seats. Everything lives in memory and in a temporary folder:
 restarting the server, or pressing Reset, starts again from the fixtures.
 """
 
@@ -22,13 +22,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from kcd_core.audit import content_hash
 from kcd_core.contracts import PolicyCatalog, Release
-from kcd_core.contracts.messages import DecisionItem
 from kcd_core.escalation import Escalation
+from kcd_core.pep import PolicyViolation
 from kcd_core.signing import Signer, sign_release
 from PIL import Image
 
+from kcd.board import BoardError, ClinicalBoard
+from kcd.board import Clinician as BoardClinician
 from kcd.cortex import DEFAULT_HOSPITAL, Cortex, HumanActor, MemoryBlobStore
 from kcd.cortex.auth import release_verifier
 from kcd.demo import DEMO_NOW, HOME_BP, LAB_PHOTO, V1_CACHED, _seed
@@ -43,13 +44,14 @@ from kcd.knowledge import KnowledgeModel
 from kcd.scenarios.edge_cases import FIXTURES as ALL_FIXTURES
 from kcd.scenarios.edge_cases import SCRIPTED_VERSION, ScriptedCtModel
 from kcd.seats.archivist import Archivist
+from kcd.seats.briefer_tools import briefer_tools
 from kcd.seats.companion import companion_tools
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 from kcd.util import sha256_hex
-from kcd.web.board import Board, Metrics, ObservedAudit, ObservedBus, RunningClock
+from kcd.web.board import Metrics, ObservedAudit, ObservedBus, RunningClock, for_browser
 from kcd.web.hub import Hub
 from kcd.web.seats import NSAID_RULE, WebCaseBriefer, WebChannel, WebCompanion, WebVerifier
 
@@ -154,7 +156,9 @@ class Session:
 
         audit = ObservedAudit(hub, self.metrics, catalog, self._on_violation)
         bus = ObservedBus(hub, self.metrics)
-        self.board = Board(hub, self.clock, lambda pack: self.briefer.pack_view(pack))
+        self.board = ClinicalBoard([], self.clock.now)  # Chrislin's Board; clinicians and actions wired below
+        self.board.subscribe(lambda ev: hub.publish("board", {"op": ev["op"], "item": {
+            "id": ev["item"]["id"], "kind": ev["item"]["kind"], "patient": ev["item"].get("patient_id")}}))
         self.desk = desk = await Desk.create(clock=self.clock, audit=audit, bus=bus, gates=self.board, pager=self)
         self.catalog = desk.catalog
         self.signers = {CLINICIAN_ID: desk.clinician}
@@ -162,6 +166,8 @@ class Session:
             if c.id not in self.signers:
                 self.signers[c.id] = Signer.generate(c.id)
                 desk.clinician_keys.add(c.id, self.signers[c.id].public_key)
+        self.board.clinicians = {c.id: BoardClinician(c.id, c.name, ROLES[c.role], self.signers[c.id])
+                                 for c in CLINICIANS}
         self.cortex = Cortex(blobs=MemoryBlobStore(), human_verifier=release_verifier(desk.clinician_keys),
                              clock=self.clock.now)
         self.versions = {s: [desk.registry.get(s)] for s in desk.registry.seats()}
@@ -169,14 +175,20 @@ class Session:
 
         self.companion = WebCompanion(self.km, hub, self.cortex, history_rcc=self._history_rcc,
                                       name_of=lambda cid: BY_ID[cid].name)
-        self.briefer = WebCaseBriefer(language_of=lambda p: self.companion.session(p).language, on_finding=self._on_finding)
+        self.briefer = WebCaseBriefer(now=self.clock.now, language_of=lambda p: self.companion.session(p).language,
+                                      on_finding=self._on_finding)
+        self.board.decide = lambda patient, release, items, note: self.briefer.publish_decision(
+            self._ctx("case_briefer"), patient_id=patient, release=release, items=items, note=note)
+        self.board.confirm_rule_fn, self.board.reject_rule_fn = self._confirm_rule, self._reject_rule
+        self.board.acknowledge_fn = desk.escalations.acknowledge
         self.reader = ImagingReader(self.cortex, None, audit=audit, clock=self.clock)
         self.archivist = Archivist(self.cortex)
         verifier = WebVerifier(now=self.clock.now, on_result=self._on_verification)
         wearables = {MARCO: HOME_BP, SOFIA: {"sbp": 152, "dbp": 94}}
         self.rt = {
             "companion": await desk.add_seat(self.companion, companion_tools(self.km, WebChannel(hub), wearables=wearables)),
-            "case_briefer": await desk.add_seat(self.briefer),
+            "case_briefer": await desk.add_seat(self.briefer, briefer_tools(self.fhir, self.km, self.clock.now,
+                                                                            self.board.create_item)),
             "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(self.fhir, self.km, self.clock.now,
                                                                                   wearables)),
             "safety_verifier": await desk.add_seat(verifier, clinical_tools(self.fhir, self.km, self.clock.now)),
@@ -235,8 +247,14 @@ class Session:
 
     def _on_violation(self, seat: str, patient: str | None, message: str) -> None:
         if patient in PATIENTS and hasattr(self, "board"):
-            self.board.add(kind="verification_failed", gate="review", status="info", patient=patient,
-                           title=f"Blocked by policy: {seat}", data={"seat": seat, "reason": message})
+            self._info(patient, "verification_failed", f"Blocked by policy: {seat}", {"seat": seat, "reason": message})
+
+    def _info(self, patient: str, kind: str, title: str, data: dict[str, Any]) -> None:
+        """A card for the clinicians to see, with nothing to sign (gate "none")."""
+        self.board.create_item({"kind": kind, "gate": "none", "patient_id": patient, "title": title, "data": data})
+
+    def _item_where(self, **match: Any) -> dict[str, Any] | None:
+        return next((i for i in self.board.items if all(i.get(k) == v for k, v in match.items())), None)
 
     # ------------------------------------------------------------------ what the seats report
     async def page(self, target: str, esc: Escalation) -> None:
@@ -246,15 +264,14 @@ class Session:
         flag = self._red_flag_of(esc)
         self.hub.publish("page", {"name": name, "pager": pager, "patient": esc.patient_id,
                                   "message": f"{esc.patient_id}: {flag.get('pattern', 'red flag')}"})
-        item = next((i for i in self.board.items if i.get("escalation_id") == esc.id), None)
+        item = self._item_where(kind="escalation", artifact_id=esc.id)
         data = {"pattern": flag.get("pattern"), "evidence": flag.get("evidence"), "level": len(esc.paged),
                 "paged": {"name": name, "pager": pager}, "deadline": self._deadline(esc)}
-        if item is None:
-            self.board.add(kind="escalation", gate="urgent_ack", patient=esc.patient_id, data=data,
-                           title=f"Red flag · {esc.patient_id}", escalation_id=esc.id)
+        if item is None:  # the Board acknowledges through Core's EscalationService, by this id
+            self.board.create_item({"kind": "escalation", "gate": "urgent_ack", "patient_id": esc.patient_id,
+                                    "title": f"Red flag · {esc.patient_id}", "artifact_id": esc.id, "data": data})
         else:
-            item["data"] = data
-            self.board.changed(item)
+            self.board.update_item(item["id"], {"data": data})
 
     def _deadline(self, esc: Escalation) -> Any:
         window = self.desk.escalations.ladder[min(esc.level, len(self.desk.escalations.ladder) - 1)].ack_window
@@ -269,11 +286,9 @@ class Session:
             await asyncio.sleep(2)
             moved = await self.desk.escalations.tick()
             for esc in moved:
-                if esc.status == "exhausted":
-                    item = next((i for i in self.board.items if i.get("escalation_id") == esc.id), None)
-                    if item:
-                        item["status"] = "exhausted: emergency desk paged"
-                        self.board.changed(item)
+                item = self._item_where(kind="escalation", artifact_id=esc.id)
+                if esc.status == "exhausted" and item is not None:
+                    self.board.update_item(item["id"], {"status": "exhausted: emergency desk paged"})
 
     def _on_verification(self, patient: str, row: dict[str, Any]) -> None:
         self._checks[(patient, row["type"])] = row["checks"]
@@ -282,26 +297,22 @@ class Session:
             if row["type"] == "therapy_conflict":
                 self.companion.new_episode(patient)  # the patient can report it again, with a better photo
             failed = [c["check"] for c in row["checks"] if not c["ok"]]
-            self.board.add(kind="verification_failed", gate="review", status="info", patient=patient,
-                           title=f"Stopped by the Safety Verifier: {row['type']}",
-                           data={"from": row["from"], "failed": failed, "checks": row["checks"],
-                                 "meaning": "Kept out of the case pack. The seat that produced it was told."})
+            self._info(patient, "verification_failed", f"Stopped by the Safety Verifier: {row['type']}",
+                       {"from": row["from"], "failed": failed, "checks": row["checks"],
+                        "meaning": "Kept out of the case pack. The seat that produced it was told."})
 
     def _on_finding(self, patient: str, kind: str, p: dict[str, Any]) -> None:
         if kind == "imaging_signal":
-            self.board.add(kind="imaging", gate="radiologist_review", patient=patient,
-                           title=f"CT signal for review · {p['provenance']['study_uid']}",
-                           data={**p, "key_image": self._image_url(patient, p.get("key_image")),
-                                 "heatmap_ref": self._image_url(patient, p.get("heatmap_ref")),
-                                 "verification": {"checks": self._checks.get((patient, kind), [])}},
-                           artifact_id=p["provenance"]["study_uid"], artifact_hash=content_hash(p))
+            self._info(patient, "imaging", f"CT signal · {p['provenance']['study_uid']}",
+                       {**p, "key_image": self._image_url(patient, p.get("key_image")),
+                        "heatmap_ref": self._image_url(patient, p.get("heatmap_ref")),
+                        "verification": {"checks": self._checks.get((patient, kind), [])}})
         elif kind == "data_delivered" and p.get("kind") == "genomic_context":
             d = p["data"]
             if (patient, d.get("panel_id")) not in self._panels_shown:
                 self._panels_shown.add((patient, d.get("panel_id")))
-                self.board.add(kind="genomics", gate="genetic_disclosure", status="info", patient=patient,
-                               title=f"Genomic context · {d.get('panel_id')}",
-                               data={**d, "panel": d.get("panel_id"), "citations": p.get("citations")})
+                self._info(patient, "genomics", f"Genomic context · {d.get('panel_id')}",
+                           {**d, "panel": d.get("panel_id"), "citations": p.get("citations")})
 
     @staticmethod
     def _image_url(patient: str, ref: str | None) -> str | None:
@@ -387,11 +398,10 @@ class Session:
             self.hub.publish("note", {"seat": "imaging_reader",
                                       "text": "This study was already read: no second signal."})
         elif not result.sent:
-            self.board.add(kind="verification_failed", gate="radiologist_review", status="info", patient=patient,
-                           title=f"CT not read: {result.status}",
-                           data={"study": result.details["provenance"].get("study_uid"),
-                                 "error": result.details.get("error"), "details_evidence": result.details_evidence_id,
-                                 "meaning": "Nothing was sent. Recorded as evidence and audit for the radiologist."})
+            self._info(patient, "verification_failed", f"CT not read: {result.status}",
+                       {"study": result.details["provenance"].get("study_uid"), "error": result.details.get("error"),
+                        "details_evidence": result.details_evidence_id,
+                        "meaning": "Nothing was sent. Recorded as evidence and audit for the radiologist."})
         self.hub.publish("memory", {"patient": patient})
         return result
 
@@ -439,80 +449,44 @@ class Session:
                     content_classes=classes or [], signed_at=self.clock.now())
         return sign_release(r, self.signers[c.id])
 
-    def _signed(self, item: dict[str, Any], status: str, c: Clinician, sig: str | None) -> None:
-        item.update(status=status, signed_by=f"{c.name} ({c.role})", signature=(sig or "")[:16])
-        self.board.changed(item)
-
-    def _gate_event(self, c: Clinician, gate: str, action: str) -> None:
-        self.hub.publish("gate", {"clinician": c.name, "gate": gate, "action": action, "verified": True})
-
     async def board_act(self, item_id: str, action: str, clinician: str, items: list[dict] | None = None,
-                        note: str = "") -> None:
-        item = self.board.get(item_id)
+                        note: str = "", gate: str | None = None) -> None:
         c = BY_NAME.get(clinician)
-        if item is None:
-            raise DeskError(f"no board item {item_id}", 404)
         if c is None:
             raise DeskError(f"unknown clinician {clinician!r}", 422)
-        if item["status"] != "open":
-            raise DeskError(f"this item is already {item['status']}")
-        expected = {"escalation": {"acknowledge"}, "imaging": {"review"}, "case_pack": {"sign"},
-                    "rule": {"confirm", "reject"}}.get(item["kind"], set())
-        if action not in expected:
-            raise DeskError(f"'{action}' does not apply to a {item['kind']} item", 422)
-        await getattr(self, f"_act_{action}")(item, c, items or [], note)
+        try:
+            item = self.board.get(item_id)
+        except BoardError as e:
+            raise DeskError(str(e), 404) from e
+        try:
+            if action == "acknowledge":
+                await self.board.acknowledge(item_id, c.id)
+            elif action == "review":
+                self.board.review(item_id, str(gate or ""), c.id)
+            elif action == "sign":
+                await self.board.sign(item_id, c.id, items or None, note)
+            elif action == "confirm":
+                self.board.confirm_rule(item_id, c.id)
+            elif action == "reject":
+                self.board.reject_rule(item_id, c.id, note)  # the Board requires a reason
+            else:
+                raise DeskError(f"unknown action {action!r}", 422)
+        except (BoardError, PolicyViolation) as e:
+            raise DeskError(str(e)) from e
         await self.drain()
-        self.hub.publish("memory", {"patient": item["patient"]})
+        self.hub.publish("gate", {"clinician": c.name, "gate": gate or item["gate"], "action": action, "verified": True})
+        self.hub.publish("memory", {"patient": item.get("patient_id")})
 
-    async def _act_acknowledge(self, item: dict, c: Clinician, _items: list, _note: str) -> None:
-        await self.desk.escalations.acknowledge(item["escalation_id"], c.id)
-        self._signed(item, "acknowledged", c, None)
-        self._gate_event(c, "urgent_ack", "acknowledged")
+    def _confirm_rule(self, rule_id: str, clinician_id: str, role: str, release: Release | None, _reason: Any) -> None:
+        rule = self.cortex.confirm(rule_id, HumanActor(clinician_id, role, release))
+        if rule["key"] == NSAID_RULE and release is not None:
+            # The Companion may repeat the rule to the patient: a release for that dose instruction, same clinician.
+            c = BY_ID[clinician_id]
+            spoken = self._release(c, rule_id, release.artifact_hash, ["dose_instruction"])
+            self.companion.released_rules[(rule["partition"], rule["key"])] = (release.artifact_hash, spoken, c.name)
 
-    async def _act_review(self, item: dict, c: Clinician, _items: list, _note: str) -> None:
-        if c.role != "radiologist":
-            raise DeskError(f"A CT signal is reviewed by a radiologist; {c.name} is a {c.role}.", 403)
-        release = self._release(c, item["artifact_id"], item["artifact_hash"], ["imaging_result"])
-        self._signed(item, "reviewed", c, release.sig)
-        self._gate_event(c, "radiologist_review", "reviewed")
-
-    async def _act_sign(self, item: dict, c: Clinician, items: list[dict], note: str) -> None:
-        patient = item["patient"]
-        waiting = [i for i in self.board.items if i["patient"] == patient and i["kind"] == "imaging"
-                   and i["status"] == "open"]
-        if "radiologist_review" in item["gates"] and waiting:
-            raise DeskError("The radiologist must review the CT signal before this case pack can be signed.")
-        if c.role == "radiologist":
-            raise DeskError("The case pack is signed by the treating clinician, not the radiologist.", 403)
-        chosen = [DecisionItem(code=str(i["code"]), patient_text=str(i["patient_text"]).strip(),
-                               patient_text_en=i.get("patient_text_en"))
-                  for i in items if i.get("selected", True) and str(i.get("patient_text", "")).strip()]
-        if not chosen:
-            raise DeskError("Select at least one decision with text for the patient.", 422)
-        if item["artifact_hash"] != self.briefer.cases[patient].artifact_hash:
-            raise DeskError("A newer version of this case pack has arrived. Review it, then sign.")
-        release = self._release(c, item["case_id"], item["artifact_hash"], ["dose_instruction"],
-                                release_id=f"dec-{item['case_id']}-v{item['version']}")
-        await self.briefer.publish_decision(self._ctx("case_briefer"), patient_id=patient, release=release,
-                                            items=chosen, note=note)
-        self._signed(item, "signed", c, release.sig)
-        self._gate_event(c, "clinician_signoff", "signed")
-
-    async def _act_confirm(self, item: dict, c: Clinician, _items: list, _note: str) -> None:
-        release = self._release(c, item["artifact_id"], item["artifact_hash"], ["dose_instruction"])
-        rule = self.cortex.confirm(item["artifact_id"], HumanActor(c.id, ROLES[c.role], release))
-        if rule["key"] == NSAID_RULE:
-            self.companion.released_rules[(item["patient"], rule["key"])] = (item["artifact_hash"], release, c.name)
-        item["data"]["status"] = "confirmed"
-        self._signed(item, "confirmed", c, release.sig)
-        self._gate_event(c, "rule_confirmation", "confirmed")
-
-    async def _act_reject(self, item: dict, c: Clinician, _items: list, _note: str) -> None:
-        release = self._release(c, item["artifact_id"], item["artifact_hash"])
-        self.cortex.reject(item["artifact_id"], HumanActor(c.id, ROLES[c.role], release), "rejected on the Board")
-        item["data"]["status"] = "rejected"
-        self._signed(item, "rejected", c, release.sig)
-        self._gate_event(c, "rule_confirmation", "rejected")
+    def _reject_rule(self, rule_id: str, clinician_id: str, role: str, release: Release | None, reason: Any) -> None:
+        self.cortex.reject(rule_id, HumanActor(clinician_id, role, release), str(reason or "rejected on the Board"))
 
     def erase_patient(self, patient: str | None, clinician: str = "Dr. A. Rossi") -> dict[str, Any]:
         patient = self._patient(patient)
@@ -520,10 +494,9 @@ class Session:
         release = self._release(c, f"erase:{patient}", "sha256:" + "0" * 64)
         receipt = self.cortex.erase_patient(patient, HumanActor(c.id, ROLES[c.role], release),
                                             "requested from the web desk")
-        self.board.forget(patient)
+        self.board.forget_patient(patient)
         self.companion.forget(patient)
         self.briefer.cases.pop(patient, None)
-        self.briefer.genomics_asked.discard(patient)
         self._panels_shown = {k for k in self._panels_shown if k[0] != patient}
         self._checks = {k: v for k, v in self._checks.items() if k[0] != patient}
         self.hub.forget(patient)
@@ -531,6 +504,28 @@ class Session:
         return {k: receipt[k] for k in ("subject_hash", "evidence_rows", "knowledge_rows", "blobs_deleted", "complete")}
 
     # ------------------------------------------------------------------ what the browser shows
+    def board_view(self, patient: str) -> list[dict[str, Any]]:
+        """The Board's items for one patient, in the shape the cards draw. Superseded case packs are left out."""
+        now, out = self.clock.now(), []
+        for i in self.board.items:
+            if i.get("patient_id") != patient or i["status"] == "superseded":
+                continue
+            d = i.get("data") or {}
+            view = {"id": i["id"], "kind": i["kind"], "gate": i["gate"], "title": i["title"], "status": i["status"],
+                    "created": i["created"], "patient": patient, "data": d,
+                    "done_note": i["history"][-1]["note"] if i.get("history") else None}
+            if i["kind"] == "case_pack":
+                view["gates"] = i["required_gates"]
+                view["data"] = {"version": i["version"], "draft": d.get("draft", []), "reviews": i["reviews"],
+                                "sbar": {k: d.get(k) or i["sbar"][k] for k in ("S", "B", "A", "R")}}
+            elif i["kind"] == "rule":
+                state = {"confirmed": "confirmed", "rejected": "rejected"}.get(i["status"], "shadow")
+                view["data"] = {"value": _rule_text(d.get("value")), "key": d.get("key"), "layer": d.get("layer"),
+                                "status": state, "evidence": d.get("evidence_ids", []),
+                                "partition": patient if d.get("layer") == 3 else DEFAULT_HOSPITAL}
+            out.append(for_browser(view, now))
+        return out
+
     def seat_view(self, seat: str) -> dict[str, Any]:
         manifest = self.desk.registry.get(seat).model_dump(mode="json")
         versions = [m.model_dump(mode="json") for m in self.versions.get(seat, [])]
@@ -563,7 +558,7 @@ class Session:
             "patient": self.patient_view(patient), "active": patient,
             "patients": [{"id": p, "name": self.fhir.patient(p)["name"]} for p in PATIENTS],
             "seats": [self.seat_view(s) for s in self.desk.registry.seats() if s != "chief_of_staff"],
-            "board": self.board.view(patient), "memory": self.memory_view(patient), "studies": self.studies(patient),
+            "board": self.board_view(patient), "memory": self.memory_view(patient), "studies": self.studies(patient),
             "clinicians": [{"name": c.name, "role": c.role} for c in CLINICIANS],
             "lang": self.lang, "busy": self.busy, "done_steps": sorted(self.done_steps),
             "ct_model": {"mode": self.ct_mode, "real_available": real},

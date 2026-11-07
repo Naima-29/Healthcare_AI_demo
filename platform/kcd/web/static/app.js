@@ -172,7 +172,7 @@ function renderStatus() {
   const d = S.data; if (!d) return;
   const c = d.config;
   $('#status').innerHTML = [
-    `<span class="pill" title="The real Case Briefer is not delivered yet. Its behaviour here is scripted; its messages are real.">Case Briefer: stand-in</span>`,
+    `<span class="pill" title="Every seat is real code; the data is synthetic.">All seats real · synthetic data</span>`,
     `<span class="pill ${d.ct_model.mode === 'real' ? 'ok' : ''}">CT: ${d.ct_model.mode === 'real' ? 'Chrislin’s model' : 'stub'}</span>`,
     `<span class="pill ${c.fhir ? 'ok' : ''}">FHIR: ${c.fhir ? 'live' : 'synthetic'}</span>`,
     `<span class="pill ${c.dicomweb ? 'ok' : ''}">PACS: ${c.dicomweb ? 'live' : 'demo'}</span>`,
@@ -339,7 +339,9 @@ function gateTag(it) {
   if (it.status === 'open') return `<span class="gate-tag">${esc(OPEN[it.gate] || it.gate)}</span>`;
   return `<span class="gate-tag done">${esc(it.status)}</span>`;
 }
-function signedLine(it) { return it.signed_by ? `<span class="signed">✓ ${esc(it.status)} by ${esc(it.signed_by)} ${it.signature ? ` · sig ${esc(it.signature)}` : ''}</span>` : ''; }
+function signedLine(it) { return it.done_note ? `<span class="signed">✓ ${esc(it.done_note)}</span>` : ''; }
+const REVIEW = { radiologist_review: ['radiologist', 'Imaging reviewed (radiologist)'], nephrologist_review: ['nephrologist', 'Medication reviewed (nephrologist)'], genetic_disclosure: ['geneticist', 'Genetics reviewed (geneticist)'] };
+const byRole = (role) => (S.data.clinicians.find((c) => c.role === role) || {}).name;
 function who(sel, def) { return `<select class="who">${S.data.clinicians.map((c) => `<option value="${esc(c.name)}" ${c.name === def ? 'selected' : ''}>${esc(c.name)} · ${esc(c.role)}</option>`).join('')}</select>`; }
 
 function card(it) {
@@ -359,12 +361,13 @@ function card(it) {
     // merge new draft items (pack re-issued) without losing edits
     for (const x of d.draft || []) if (!f.items.some((y) => y.code === x.code)) f.items.push({ ...x });
     return `<div class="card ${open ? 'open' : ''}" data-id="${it.id}">${head}<div class="card-b sbar">
-      <div style="font-size:11px;color:var(--muted)">Assembled by the Case Briefer (stand-in) · version ${d.version} · needs: ${esc((it.gates || []).join(', '))}</div>
-      <h5>S · Situation</h5><ul>${(sb.S || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-      <h5>B · Background</h5><ul>${(sb.B || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <div style="font-size:11px;color:var(--muted)">Assembled by the Case Briefer · version ${d.version} · needs: ${esc((it.gates || []).join(', '))}</div>
+      <h5>S · Situation</h5><ul>${(sb.S || []).map(line).map((x) => `<li>${x.from ? `<span class="src">${esc(x.from)}</span>` : ''}${esc(x.text)}</li>`).join('')}</ul>
+      <h5>B · Background</h5><ul>${(sb.B || []).map(line).map((x) => `<li>${esc(x.text)}</li>`).join('')}</ul>
       <h5>A · Assessment</h5><ul>${(sb.A || []).map(line).map((a) => `<li>${a.from ? `<span class="src">${esc(a.from)}</span>` : ''}${esc(a.text)}${(a.cite || []).map((c) => `<span class="cite">${esc(c)}</span>`).join('')}</li>`).join('')}</ul>
       <h5>R · Options for the clinician</h5><ul>${(sb.R || []).map(line).map((r) => `<li>${esc(r.text)}${(r.cite || []).map((c) => `<span class="cite">${esc(c)}</span>`).join('')}</li>`).join('')}</ul>
       ${sb.narrative ? `<h5>Edge SLM narrative</h5><div>${esc(sb.narrative)}</div>` : ''}
+      ${Object.keys(d.reviews || {}).length ? `<h5>Reviews needed before signing</h5><div class="reviews">${Object.entries(d.reviews).map(([g, r]) => r ? `<div class="signed">✓ ${esc(REVIEW[g]?.[1] || g)}: ${esc(r.name)}</div>` : `<div class="review-row">${who('who', byRole(REVIEW[g]?.[0]))}<button class="btn gate" data-act="review" data-gate="${esc(g)}">${esc(REVIEW[g]?.[1] || g)}</button></div>`).join('')}</div>` : ''}
       ${open ? `<h5>Decision (draft — edit what the patient will read)</h5><div class="decision">${f.items.map((x, i) => `<label><input type="checkbox" data-i="${i}" ${x.selected !== false ? 'checked' : ''}><span><b>${esc(x.code)}</b><textarea data-i="${i}">${esc(x.patient_text)}</textarea></span></label>`).join('')}
         <textarea class="note" placeholder="Optional note to the patient">${esc(f.note)}</textarea></div>` : ''}
     </div><div class="card-f">${open ? `${who('who', f.clinician)}<button class="btn ok" data-act="sign">Sign &amp; release to patient</button><span style="font-size:11px;color:var(--muted)">Signed with your key; the Companion can only say what you sign.</span>` : signedLine(it)}</div></div>`;
@@ -379,7 +382,7 @@ function card(it) {
       <span class="k">Model</span><span>${esc(d.provenance?.model)} ${d.provenance?.live_model ? '(real model)' : '(stub: fixed answer, not a real reading)'}</span>
       <span class="k">Verification</span><span>${(d.verification?.checks || []).map((c) => `${c.ok ? '✓' : '✗'} ${esc(c.check)}`).join('<br>')}</span></div>
       <div style="font-size:12px;color:var(--muted)">${esc(d.note)}</div></div>
-      <div class="card-f">${open ? `${who('who', 'Dr. E. Conti')}<button class="btn gate" data-act="review">Mark reviewed (radiologist)</button>` : signedLine(it)}</div></div>`;
+      <div class="card-f"><span style="font-size:11px;color:var(--muted)">Reviewed by the radiologist on the case pack</span></div></div>`;
   }
   if (it.kind === 'genomics') {
     return `<div class="card" data-id="${it.id}">${head}<div class="card-b"><div style="font-size:12px;color:var(--muted)">${esc(d.panel)} · lab classification kept as reported (never reclassified)</div>
@@ -406,11 +409,13 @@ function wireBoard(m) {
     const note = $('.decision .note', c); if (note) note.oninput = () => { f.note = note.value; };
     const sel = $('select.who', c); if (sel && f) sel.onchange = () => { f.clinician = sel.value; };
     $$('[data-act]', c).forEach((b) => b.onclick = async () => {
-      const clinician = $('select.who', c)?.value;
+      const clinician = $('select.who', b.parentElement)?.value || $('.card-f select.who', c)?.value;
+      let note;
+      if (b.dataset.act === 'reject') { note = prompt('Why reject this rule?'); if (!note) return; }
       b.disabled = true;
       try {
         if (b.dataset.act === 'sign') await api('/api/board/act', { item: id, action: 'sign', clinician, items: f.items, note: f.note });
-        else await api('/api/board/act', { item: id, action: b.dataset.act, clinician });
+        else await api('/api/board/act', { item: id, action: b.dataset.act, clinician, gate: b.dataset.gate, note });
         toast(`${b.textContent} — signed by ${clinician}`);
       } catch (e) { toast(e.message); b.disabled = false; }
     });
@@ -433,7 +438,7 @@ function renderRoster() {
   $('#roster').innerHTML = `<h2 style="margin-bottom:12px">Roster — the seats + the Chief of Staff</h2><div class="grid">${cos}${seats.map(({ id, manifest: m, metrics: x, shadow }) => `
     <div class="seat ${m.location === 'patient_edge' ? 'patient' : ''}">
       <div class="h">${AVATAR[id] ? `<img class="avatar" src="${AVATAR[id]}" alt="">` : `<span class="avatar">${INITIALS(m.name)}</span>`}<div><h3>${esc(m.name)} <span style="font:500 11px var(--body);color:var(--muted)">v${m.version}${shadow ? ' · shadow' : ''}</span></h3><div class="role">${esc(m.role || '')}</div></div></div>
-      <div class="chips">${chip('', m.location === 'patient_edge' ? 'patient phone' : 'hospital edge')}${id === 'case_briefer' ? chip('gate', 'stand-in behaviour') : ''}${shadow ? chip('gate', 'no code yet') : ''}</div>
+      <div class="chips">${chip('', m.location === 'patient_edge' ? 'patient phone' : 'hospital edge')}${shadow ? chip('gate', 'no code yet') : ''}</div>
       <div class="jd">${esc(m.job_description)}</div>
       <div class="chips">${m.refuses.map((r) => chip('ref', r)).join('')}</div>
       <div class="chips">${m.gates.map((g) => chip('gate', g)).join('')}</div>
