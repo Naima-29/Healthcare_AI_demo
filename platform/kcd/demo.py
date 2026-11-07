@@ -39,7 +39,8 @@ from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.seats.safety_verifier import SafetyVerifier
-from kcd.standins import StandInCaseBriefer
+from kcd.seats.briefer_tools import briefer_tools
+from kcd.seats.case_briefer import CaseBriefer
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "marco-r"
@@ -84,7 +85,7 @@ async def run(model: CtModel, calibration: Calibration | None, db: str, blobs: s
         patient_channel = PatientChannel()
         companion = Companion(km, demo_lab_reports={PATIENT: LAB_PHOTO},
                               history_provider=lambda _patient: {"rcc": True})
-        briefer = StandInCaseBriefer()
+        briefer = CaseBriefer(now=desk.clock.now)
         reader = ImagingReader(cortex, calibration, audit=desk.audit, clock=desk.clock)
         verifier = SafetyVerifier(now=desk.clock.now)
         archivist = Archivist(cortex)
@@ -92,7 +93,7 @@ async def run(model: CtModel, calibration: Calibration | None, db: str, blobs: s
             "companion": await desk.add_seat(
                 companion, companion_tools(km, patient_channel, wearables={PATIENT: HOME_BP})
             ),
-            "case_briefer": await desk.add_seat(briefer),
+            "case_briefer": await desk.add_seat(briefer, briefer_tools(fhir, km, desk.clock.now, desk.gates.create_item)),
             "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(fhir, km, desk.clock.now,
                                                                                   {PATIENT: HOME_BP})),
             "safety_verifier": await desk.add_seat(verifier, clinical_tools(fhir, km, desk.clock.now)),

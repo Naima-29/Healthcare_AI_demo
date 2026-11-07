@@ -21,6 +21,9 @@ ct-model = ["torch>=2.2", "timm>=1.0", "segmentation-models-pytorch>=0.3", "scip
 [dependency-groups]
 dev = ["pytest>=8", "httpx2>=2"]   # httpx2: what starlette.testclient asks for
 
+[tool.uv.sources]
+kcd-core = { path = "..", editable = true }
+
 [tool.ruff]
 extend = "../pyproject.toml"    # same lint rules as Core
 
