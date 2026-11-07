@@ -16,6 +16,9 @@ When there is no model result at all (undecodable image, model failure) the cont
 say so (label and p_calibrated are required), so nothing is sent: the failure is written to evidence
 and audit (decision "error") and returned to the caller. See the proposal in platform/kcd/README.md.
 
+Technical note (ImagingSignal.note): the fixed NOTE, then the model's caveats (its model card, for example
+MODEL_CARD_chrislin.md) and this image's warnings, then the details evidence id.
+
 Gate: radiologist_review (manifest), opened on the case pack downstream.
 Refusals: label_as_diagnosis (text guard + ctx.guard_content("diagnosis_claim")), report_to_patient
 (only peer is the Safety Verifier), alter_image (no PACS write tool; key image stored with its sha256).
@@ -112,7 +115,7 @@ class ImagingReader(Seat):
                         "details_evidence_id": details_ev["id"], "error": details.get("error")})
             result = ImagingResult(details["status"], False, None, details_ev["id"], details)
         else:
-            note = f"{NOTE} Details: cortex:evidence/{details_ev['id']}"
+            note = _note(details, details_ev["id"])
             if is_diagnosis_claim(note):
                 ctx.guard_content("diagnosis_claim")  # no release for a model signal: the PEP blocks it
             cal = details["calibration"]
@@ -182,7 +185,7 @@ class ImagingReader(Seat):
             "cam_metrics": metrics, "quality_checks": image_quality["checks"] + pred_checks, "issues": issues,
             "in_distribution": in_distribution, "ood_score": round(float(ood_score), 4),
             "calibration": calibration, "provenance": {**provenance, "model_version": pred.model_version},
-            "note": NOTE,
+            "model_caveats": list(pred.caveats), "model_warnings": list(pred.warnings), "note": NOTE,
         }
 
     def _calibrate(self, pred: CtPrediction) -> tuple[dict, np.ndarray]:
@@ -214,6 +217,16 @@ class ImagingReader(Seat):
                 "quality_checks": checks, "issues": [c["name"] for c in checks if not c["ok"]],
                 "in_distribution": None, "ood_score": None, "calibration": None, "provenance": provenance,
                 "note": NOTE, "error": error}
+
+
+def _note(details: dict, details_ev_id: str) -> str:
+    """The radiologist's technical note: the fixed note, the model card's caveats and this image's warnings."""
+    parts = [NOTE]
+    if details.get("model_caveats"):
+        parts.append("Model caveats: " + " ".join(details["model_caveats"]))
+    if details.get("model_warnings"):
+        parts.append("This image: " + "; ".join(details["model_warnings"]) + ".")
+    return " ".join(parts) + f" Details: cortex:evidence/{details_ev_id}"
 
 
 def _numeric(metrics: dict | None) -> dict[str, float]:

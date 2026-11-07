@@ -1,0 +1,8 @@
+##fileformat=VCFv4.2
+##fileDate=20230510
+##panel_id=GEN-SB-2023-0007
+##patient_id=sofia-b
+##panel_method=Older 12-gene RCC panel
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE
+chr3	10183812	rs5030827	C	T	.	PASS	GENEINFO=VHL:7428;CLNSIG=Pathogenic	GT	0/1
+chr2	1	.	G	A	.	PASS	GENE=FLCN;CLNSIG=Benign	GT	0/0

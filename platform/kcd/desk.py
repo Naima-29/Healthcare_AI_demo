@@ -19,7 +19,7 @@ from kcd_core.clock import FakeClock
 from kcd_core.contracts import Envelope, MessageType, PolicyCatalog, Release, new_envelope
 from kcd_core.contracts.messages import CasePackReady
 from kcd_core.dispatcher import Dispatcher
-from kcd_core.escalation import Escalation, EscalationService, InMemoryEscalationStore
+from kcd_core.escalation import DEFAULT_LADDER, Escalation, EscalationService, InMemoryEscalationStore, LadderStep
 from kcd_core.registry import ManifestRegistry
 from kcd_core.runtime import Seat, SeatRuntime, ToolRegistry
 from kcd_core.signing import KeyRing, Signer, sign_envelope, sign_release
@@ -65,37 +65,43 @@ class RecordingGates:
 class Desk:
     catalog: PolicyCatalog
     registry: ManifestRegistry
-    clock: FakeClock
+    clock: Any
     audit: InMemoryAudit
     bus: InMemoryBus
     signers: dict[str, Signer]
     seat_keys: KeyRing
     clinician: Signer
     clinician_keys: KeyRing
-    gates: RecordingGates
-    pager: RecordingPager
+    gates: Any
+    pager: Any
     dispatcher: Dispatcher
+    escalations: EscalationService
     runtimes: dict[str, SeatRuntime] = field(default_factory=dict)
 
     @classmethod
-    async def create(cls, start: datetime | None = None) -> Desk:
+    async def create(cls, start: datetime | None = None, *, clock: Any = None, audit: InMemoryAudit | None = None,
+                     bus: InMemoryBus | None = None, gates: Any = None, pager: Any = None,
+                     ladder: tuple[LadderStep, ...] = DEFAULT_LADDER) -> Desk:
+        """The keyword arguments let the web desk (kcd.web) observe the same components the tests use."""
         catalog = PolicyCatalog.load(CATALOG_PATH)
         registry = ManifestRegistry.from_dir(catalog, MANIFEST_DIR)
-        clock, audit, bus = FakeClock(start), InMemoryAudit(), InMemoryBus(max_attempts=3)
+        clock = clock or FakeClock(start)
+        audit = audit if audit is not None else InMemoryAudit()
+        bus = bus if bus is not None else InMemoryBus(max_attempts=3)
         signers = {s: Signer.generate(s) for s in registry.seats()}
         seat_keys = KeyRing()
         for s, signer in signers.items():
             seat_keys.add(s, signer.public_key)
         clinician = Signer.generate(CLINICIAN_ID)
         clinician_keys = KeyRing({CLINICIAN_ID: clinician.public_key})
-        gates, pager = RecordingGates(), RecordingPager()
+        gates, pager = gates if gates is not None else RecordingGates(), pager or RecordingPager()
         escalations = EscalationService(rota=_Rota(), pager=pager, store=InMemoryEscalationStore(),
-                                        clock=clock, audit=audit)
+                                        clock=clock, audit=audit, ladder=ladder)
         dispatcher = Dispatcher(bus=bus, registry=registry, seat_keys=seat_keys, audit=audit, clock=clock,
                                 escalations=escalations, gates=gates)
         await dispatcher.start()
         return cls(catalog, registry, clock, audit, bus, signers, seat_keys, clinician, clinician_keys, gates,
-                   pager, dispatcher)
+                   pager, dispatcher, escalations)
 
     async def add_seat(self, seat: Seat, tools: dict[str, Any] | None = None, timeout_s: float = 10.0) -> SeatRuntime:
         rt = SeatRuntime(seat, registry=self.registry, catalog=self.catalog, signer=self.signers[seat.seat_id],

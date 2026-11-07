@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.06",
+  "modality": "CT",
+  "acquired": "2026-05-10T09:00:00Z",
+  "description": "Synthetic: poor image: 96 px, almost no contrast",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}
