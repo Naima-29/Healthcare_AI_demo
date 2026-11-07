@@ -213,3 +213,5 @@ table.t td { border-bottom: 1px solid var(--chip); padding: 5px 6px; vertical-al
 .ph-photos { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; }
 .ph-photos button { font-size: 11px; border: 1px solid var(--muted); background: transparent; border-radius: 8px; padding: 3px 6px; cursor: pointer; color: inherit; }
 .card.failed { border-left: 3px solid var(--bad); }
+.reviews { display: grid; gap: 6px; }
+.review-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

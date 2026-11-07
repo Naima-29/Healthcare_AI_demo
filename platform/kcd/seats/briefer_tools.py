@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import Any
 
 from kcd.fhir import FolderFhir
-from kcd.tools import Tool, board_tools, clinical_tools
 from kcd.knowledge import KnowledgeModel
+from kcd.tools import Tool, board_tools, clinical_tools
 
 
 def briefer_tools(fhir: FolderFhir, km: KnowledgeModel, now: Callable[[], datetime],

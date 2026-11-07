@@ -1,7 +1,7 @@
-"""The Clinical Board behind the Clinicians door, and the observers that show the desk's work to the browser.
+"""What shows the desk's work to the browser: the demo clock, and kcd_core's bus and audit, observed.
 
-Board implements the Dispatcher's GatePort (case packs) and the seats' board.create_item (rules to confirm).
-ObservedBus and ObservedAudit are kcd_core's in-memory bus and audit, publishing what passes through them.
+The Clinical Board itself is Chrislin's (kcd/board). ObservedBus and ObservedAudit are kcd_core's in-memory bus and
+audit, publishing what passes through them.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ from typing import Any
 from kcd_core.audit import InMemoryAudit
 from kcd_core.bus import DISPATCHER_INBOX, InMemoryBus, seat_inbox
 from kcd_core.contracts import Envelope, PolicyCatalog
-from kcd_core.contracts.messages import CasePackReady
 
 from kcd.web.hub import Hub
 
@@ -33,64 +32,11 @@ class RunningClock:
         return self.start + timedelta(seconds=monotonic() - self._t0)
 
 
-class Board:
-    def __init__(self, hub: Hub, clock: RunningClock, pack_view: Callable[[CasePackReady], dict[str, Any]]):
-        self.hub, self.clock, self.pack_view = hub, clock, pack_view
-        self.items: list[dict[str, Any]] = []
-        self._n = 0
-
-    def add(self, *, kind: str, gate: str, title: str, patient: str, data: dict[str, Any], status: str = "open",
-            **extra: Any) -> dict[str, Any]:
-        self._n += 1
-        item = {"id": f"item-{self._n}", "kind": kind, "gate": gate, "title": title, "status": status,
-                "patient": patient, "created": datetime.now(UTC).isoformat(), "data": data, "signed_by": None,
-                "signature": None, **extra}
-        self.items.append(item)
-        self.hub.publish("board", {"item": {"id": item["id"], "kind": kind, "patient": patient}})
-        return item
-
-    def get(self, item_id: str) -> dict[str, Any] | None:
-        return next((i for i in self.items if i["id"] == item_id), None)
-
-    def changed(self, item: dict[str, Any]) -> None:
-        self.hub.publish("board", {"item": {"id": item["id"], "kind": item["kind"], "patient": item["patient"]}})
-
-    def forget(self, patient: str) -> None:
-        self.items = [i for i in self.items if i["patient"] != patient]
-
-    def view(self, patient: str) -> list[dict[str, Any]]:
-        """The active patient's items. Deadlines go out in wall-clock time, since the browser counts them down."""
-        return [_for_browser(i, self.clock.now()) for i in self.items if i["patient"] == patient]
-
-    # ------------------------------------------------------------------ GatePort (the Dispatcher)
-    async def open_gate(self, env: Envelope, pack: CasePackReady) -> None:
-        item = next((i for i in self.items if i["kind"] == "case_pack" and i["case_id"] == pack.case_id
-                     and i["status"] == "open"), None)
-        title = f"Case pack · {env.patient_id}"
-        fields = {"version": pack.version, "artifact_hash": pack.artifact_hash, "data": self.pack_view(pack)}
-        if item is None:  # the first version, or new findings after the last signature
-            self.add(kind="case_pack", gate="clinician_signoff", title=title, patient=env.patient_id,
-                     case_id=pack.case_id, gates=pack.gates, **fields)
-        elif pack.version > item["version"]:
-            item.update(gates=pack.gates, **fields)
-            self.changed(item)
-
-    # ------------------------------------------------------------------ board.create_item (the seats)
-    def create_item(self, item: dict[str, Any]) -> str:
-        value = item["data"]["value"]
-        text = value.get("instruction") or f"{value.get('pattern')} -> {value.get('route_to')}"
-        layer = item["data"]["layer"]
-        data = {"value": text, "key": item["data"]["key"], "layer": layer, "status": "shadow",
-                "partition": item["patient_id"] if layer == 3 else "hospital",
-                "evidence": item["data"]["evidence_ids"]}
-        return self.add(kind=item["kind"], gate=item["gate"], title=item["title"], patient=item["patient_id"], data=data,
-                        artifact_id=item["artifact_id"], artifact_hash=item["artifact_hash"])["id"]
-
-
-def _for_browser(item: dict[str, Any], now: datetime) -> dict[str, Any]:
-    out = {**item, "data": dict(item["data"])}
+def for_browser(item: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Deadlines go out in wall-clock time, since the browser counts them down."""
+    out = {**item, "data": dict(item.get("data") or {})}
     deadline = out["data"].get("deadline")
-    if deadline is not None:
+    if isinstance(deadline, datetime):
         out["data"]["deadline"] = (datetime.now(UTC) + (deadline - now)).isoformat()
     return out
 

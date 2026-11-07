@@ -9,7 +9,7 @@ from pathlib import Path
 from kcd_core.contracts import MessageType
 from kcd_core.signing import Signer
 
-from kcd.board import BoardError, Clinician, ClinicalBoard
+from kcd.board import BoardError, ClinicalBoard, Clinician
 from kcd.desk import Desk
 from kcd.fhir import FolderFhir
 from kcd.knowledge import KnowledgeModel

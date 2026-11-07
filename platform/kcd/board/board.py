@@ -62,7 +62,8 @@ class Clinician:
 
 
 Decide = Callable[[str, Release, list[DecisionItem], str], Awaitable[ClinicianDecision]]
-RuleAction = Callable[[str, str, str, Release | None, str | None], Any]  # (rule id, clinician id, role, release, reason)
+# (rule id, clinician id, role, release, reason)
+RuleAction = Callable[[str, str, str, Release | None, str | None], Any]
 
 
 class ClinicalBoard:
@@ -155,6 +156,12 @@ class ClinicalBoard:
             raise BoardError(f"unknown board item {item_id}")
         item.update(patch)
         self._emit("update", item)
+
+    def forget_patient(self, patient_id: str) -> None:
+        """Right to erasure: drop every item, draft and opened gate of this patient."""
+        self._items = {k: v for k, v in self._items.items() if v.get("patient_id") != patient_id}
+        self.opened = [(env, pack) for env, pack in self.opened if env.patient_id != patient_id]
+        self._details = {k: v for k, v in self._details.items() if v.get("patient_id") != patient_id}
 
     # ------------------------------------------------------------------ human actions
     def _clinician(self, clinician_id: str) -> Clinician:

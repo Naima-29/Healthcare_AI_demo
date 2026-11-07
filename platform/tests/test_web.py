@@ -47,6 +47,16 @@ def read_ct(client: TestClient, study_uid: str | None = None):
     return client.post("/api/pacs/new-study", json={"study_uid": study_uid, "wait": True})
 
 
+REVIEWER = {"radiologist_review": "Dr. E. Conti", "nephrologist_review": "Dr. A. Rossi",
+            "genetic_disclosure": "Dr. P. Greco"}
+
+
+def review_all(client: TestClient, pack: dict) -> None:
+    for gate, review in pack["data"]["reviews"].items():
+        if review is None:
+            assert act(client, pack["id"], "review", REVIEWER[gate], gate=gate).status_code == 200
+
+
 def run_golden_path(client: TestClient) -> None:
     for step in STEPS:
         assert client.post("/api/scenario/step", json={"n": step["n"], "wait": True}).status_code == 200
@@ -76,7 +86,10 @@ def test_golden_path_end_to_end(client: TestClient) -> None:
     pages = events(client, "page")
     assert [p["name"] for p in pages] == ["Dr. A. Rossi"] and "severe flank pain" in pages[0]["message"]
     statuses = {i["kind"]: i["status"] for i in s["board"]}
-    assert statuses["escalation"] == "acknowledged" and statuses["imaging"] == "reviewed"
+    assert statuses["escalation"] == "acknowledged" and statuses["imaging"] == "info"
+    pack = next(i for i in s["board"] if i["kind"] == "case_pack")
+    assert all(r is not None for r in pack["data"]["reviews"].values())
+    assert "signed by Dr. A. Rossi" in pack["done_note"]
     assert statuses["case_pack"] == "signed" and statuses["rule"] == "confirmed"
     # The patient heard: the safety script, a hold on the CT, the signed decision, and the confirmed rule.
     said = replies(client)
@@ -117,11 +130,10 @@ def test_case_pack_cannot_be_signed_before_the_radiologist(client: TestClient) -
     assert read_ct(client).json()["sent"] is True
     pack = items(client, "case_pack")[0]
     r = act(client, pack["id"], "sign", "Dr. A. Rossi", items=pack["data"]["draft"])
-    assert r.status_code == 409 and "radiologist" in r.json()["error"]
-    imaging = items(client, "imaging")[0]
-    r = act(client, imaging["id"], "review", "Dr. A. Rossi")
-    assert r.status_code == 403
-    assert act(client, imaging["id"], "review", "Dr. E. Conti").status_code == 200
+    assert r.status_code == 409 and "review first: radiologist_review" in r.json()["error"]
+    r = act(client, pack["id"], "review", "Dr. A. Rossi", gate="radiologist_review")
+    assert r.status_code == 409 and "clinician:radiology" in r.json()["error"]
+    assert act(client, pack["id"], "review", "Dr. E. Conti", gate="radiologist_review").status_code == 200
     pack = items(client, "case_pack")[0]
     assert act(client, pack["id"], "sign", "Dr. A. Rossi", items=pack["data"]["draft"]).status_code == 200
 
@@ -130,17 +142,20 @@ def test_edited_wording_is_exactly_what_the_patient_reads(client: TestClient) ->
     client.post("/api/scenario/step", json={"n": 2, "wait": True})
     client.post("/api/scenario/step", json={"n": 3, "wait": True})
     pack = items(client, "case_pack")[0]
+    review_all(client, pack)
     draft = [{**pack["data"]["draft"][0], "patient_text": "come at 8, Building C"}]
     assert act(client, pack["id"], "sign", "Dr. A. Rossi", items=draft, note="Bring your results.").status_code == 200
     last = replies(client)[-1]
-    assert "come at 8, Building C" in last and "Bring your results." in last and "tomorrow at 9:00" not in last
+    assert "come at 8, Building C" in last and "Bring your results." in last
+    assert pack["data"]["draft"][0]["patient_text"] not in last  # the draft wording was replaced, not added
 
 
 def test_rejected_rule_is_not_used(client: TestClient) -> None:
     for n in (2, 3, 4, 6):
         client.post("/api/scenario/step", json={"n": n, "wait": True})
+    assert act(client, items(client, "rule")[0]["id"], "reject", "Dr. A. Rossi").status_code == 409  # no reason
     for rule in items(client, "rule"):
-        assert act(client, rule["id"], "reject", "Dr. A. Rossi").status_code == 200
+        assert act(client, rule["id"], "reject", "Dr. A. Rossi", note="not for this patient").status_code == 200
     say(client, "Can I take another ibuprofen tonight? The pain is back.")
     assert "avoid ibuprofen" not in replies(client)[-1]
 

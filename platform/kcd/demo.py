@@ -34,13 +34,13 @@ from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
 from kcd.patient.channel import PatientChannel
 from kcd.seats.archivist import Archivist
+from kcd.seats.briefer_tools import briefer_tools
+from kcd.seats.case_briefer import CaseBriefer
 from kcd.seats.companion import Companion, companion_tools
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.seats.safety_verifier import SafetyVerifier
-from kcd.seats.briefer_tools import briefer_tools
-from kcd.seats.case_briefer import CaseBriefer
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "marco-r"
@@ -93,7 +93,8 @@ async def run(model: CtModel, calibration: Calibration | None, db: str, blobs: s
             "companion": await desk.add_seat(
                 companion, companion_tools(km, patient_channel, wearables={PATIENT: HOME_BP})
             ),
-            "case_briefer": await desk.add_seat(briefer, briefer_tools(fhir, km, desk.clock.now, desk.gates.create_item)),
+            "case_briefer": await desk.add_seat(briefer, briefer_tools(fhir, km, desk.clock.now,
+                                                                       desk.gates.create_item)),
             "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(fhir, km, desk.clock.now,
                                                                                   {PATIENT: HOME_BP})),
             "safety_verifier": await desk.add_seat(verifier, clinical_tools(fhir, km, desk.clock.now)),

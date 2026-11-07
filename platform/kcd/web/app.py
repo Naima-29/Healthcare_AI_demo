@@ -127,7 +127,7 @@ def create_app() -> FastAPI:
     async def board_act(request: Request) -> dict[str, bool]:
         b = await _body(request)
         await desk().board_act(_text(b, "item"), _text(b, "action"), _text(b, "clinician"), b.get("items"),
-                               str(b.get("note") or ""))
+                               str(b.get("note") or ""), b.get("gate"))
         return {"ok": True}
 
     # ------------------------------------------------------------------ CT studies

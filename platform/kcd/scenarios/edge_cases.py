@@ -49,11 +49,11 @@ from kcd.imaging.model import CtModel, CtModelError, CtPrediction, prediction_fr
 from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
 from kcd.seats.archivist import Archivist
+from kcd.seats.case_briefer import CaseBriefer
 from kcd.seats.genomics_interpreter import GenomicsInterpreter
 from kcd.seats.imaging_reader import ImagingReader, NoStudy
 from kcd.seats.renal_guardian import RenalGuardian
 from kcd.seats.safety_verifier import SafetyVerifier
-from kcd.seats.case_briefer import CaseBriefer
 from kcd.standins import StandInCompanion
 from kcd.tools import board_tools, clinical_tools, genomics_tools, imaging_tools
 from kcd.util import sha256_hex
