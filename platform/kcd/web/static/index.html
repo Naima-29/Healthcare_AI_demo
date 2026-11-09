@@ -41,8 +41,9 @@
       </section>
       <section class="view" id="view-patient"><div class="single center"><div class="door">Patient <small>talks only to the Companion</small></div><div data-mount="phone" style="width:100%"></div></div></section>
       <section class="view" id="view-board"><div class="single"><div class="pagehead"><h2>Clinical Board</h2><p>Everything that needs a clinician: urgent alerts, case packs and rules to confirm. Your signature is what releases anything to the patient.</p></div><div data-mount="board" class="board-full"></div></div></section>
-      <section class="view" id="view-director"><div class="single"><div class="pagehead"><h2>Chief of Staff</h2></div>
-        <div class="notice">This door is not connected in the Python desk yet. The Chief of Staff turns a plain-language job description into a validated manifest, shows the diff and hot-reloads it. It is specified in the plan but is not a running seat in <code>kcd_core</code> yet. The Roster and Agent page show the live manifests it will edit.</div></div></section>
+      <section class="view" id="view-director"><div class="single" id="director"></div></section>
+      <section class="view" id="view-ct"><div class="single" id="ct"></div></section>
+      <section class="view" id="view-tools"><div class="single" id="tools"></div></section>
       <section class="view" id="view-roster"><div class="single" id="roster"></div></section>
       <section class="view" id="view-agent"><div class="single" id="agent"></div></section>
       <section class="view" id="view-stream"><div class="single"><div class="pagehead"><h2>Message flow</h2><p>Every message between seats goes through the Dispatcher, signed with Ed25519 and checked against the sender’s manifest.</p></div><div data-mount="map"></div><div data-mount="stream" class="stream-full" style="margin-top:12px"></div></div></section>

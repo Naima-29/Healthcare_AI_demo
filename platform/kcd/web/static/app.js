@@ -1,3 +1,4 @@
+import { createExtras } from '/extras.js';
 // Kidney Care Desk (Python) - front end. 
 // Doors: Patient -> Companion, Clinicians -> Clinical Board. Views behind them: stream, roster, agent page, memory.
 const $ = (s, el = document) => el.querySelector(s);
@@ -20,6 +21,7 @@ const pname = (id) => P(id)?.name || id || '';
 const first = (id) => pname(id).split(' ')[0];
 const cur = () => P(S.patient);
 const key = (n, pid = S.patient) => `${pid}:${n}`;
+const X = createExtras({ S, api, $, $$, esc, toast, time, pname, first, refresh, redraw: () => renderAll() });
 const AVATAR = { companion: '/assets/patient_agent.jpg', case_briefer: '/assets/doctor_agent.jpg' };
 const INITIALS = (n) => n.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 const GATE_ROLE = { radiologist_review: 'clinician:radiology', nephrologist_review: 'clinician:nephrology', genetic_disclosure: 'clinician:genetics' };
@@ -47,11 +49,13 @@ const ICON = {
   alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
   pack: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h4"/>',
   rule: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  ct: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  tools: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.4 2.4-2.6-.6-.6-2.6z"/>',
   hint: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
-const TABS = [['stage', 'Stage'], ['patient', 'Patient'], ['board', 'Board'], ['director', 'Director'], null,
-  ['roster', 'Roster'], ['agent', 'Agent'], ['stream', 'Flow'], ['memory', 'Memory']];
+const TABS = [['stage', 'Stage'], ['patient', 'Patient'], ['board', 'Board'], ['director', 'Director'], ['ct', 'CT'], null,
+  ['roster', 'Roster'], ['agent', 'Agent'], ['stream', 'Flow'], ['memory', 'Memory'], ['tools', 'Admin']];
 
 // ------------------------------------------------------------------ boot
 async function boot() {
@@ -81,6 +85,7 @@ function onEvent(e) {
   if (e.kind === 'scenario') { renderGolden(); renderNext(); }
   mapEvent(e);
   if (['board', 'gate', 'a2a'].includes(e.kind)) refresh();
+  X.onEvent(e);
 }
 function buildRail() {
   $('#tabs').innerHTML = `<img class="logo" src="/assets/loopnexus.png" alt="Loop Nexus">` + TABS.map((t) => t ? `<button data-view="${t[0]}" class="${t[0] === S.view ? 'active' : ''}" title="${t[1]}"><span class="badge">${svg(t[0])}<i hidden></i></span>${t[1]}</button>` : '<div class="sep"></div>').join('');
@@ -100,6 +105,7 @@ function renderData() {
   if (S.view === 'roster') renderRoster();
   if (S.view === 'agent') renderAgent();
   if (S.view === 'memory') renderMemory();
+  X.render();
 }
 
 // ------------------------------------------------------------------ header and guidance
@@ -107,6 +113,7 @@ function selectPatient(id) {
   if (id === S.patient) return;
   S.patient = id; S.tip = null;
   renderPatients(); renderGolden(); mountPhone(); redrawStream(); renderBoard(); renderNext();
+  X.render();
 }
 function renderPatients() {
   const el = $('#patients'); if (!el || !S.data) return;
@@ -363,6 +370,7 @@ function card(it) {
       <div class="kv"><span class="k">Rule</span><span class="mono">${esc(d.key)}</span><span class="k">Scope</span><span>Layer ${esc(d.layer)}, version ${esc(d.version)}</span><span class="k">Status</span><span>${open ? 'On trial (shadow) until a clinician confirms it' : esc(it.status)}</span></div></div>
       <div class="card-f">${open ? `${who('dr_rossi')}<input class="why" placeholder="Reason (needed to reject)"><button class="btn ok" data-act="confirm">Confirm rule</button><button class="btn ghost" data-act="reject">Reject</button>` : signedLine(it)}</div></div>`;
   }
+  if (it.kind === 'verification_failed') return X.infoCard(it, head, cls);
   return `<div class="${cls}" data-id="${it.id}">${head}<div class="card-b"><pre class="mono">${esc(JSON.stringify(d, null, 2))}</pre></div></div>`;
 }
 function ruleText(v) { try { const o = typeof v === 'string' ? JSON.parse(v) : v; return o.instruction || val(v); } catch { return val(v); } }
@@ -413,13 +421,13 @@ function wireBoard(m) {
 
 // ------------------------------------------------------------------ ROSTER
 const JOURNEY = ['companion', 'dispatcher', 'renal_guardian', 'safety_verifier', 'imaging_reader', 'genomics_interpreter', 'case_briefer', 'archivist', 'chief_of_staff'];
-const ROSTER_ORDER = (seats) => seats.slice().sort((a, b) => JOURNEY.indexOf(a.id) - JOURNEY.indexOf(b.id));
+const ROSTER_ORDER = (seats) => seats.slice().sort((a, b) => { const r = (s) => { const i = JOURNEY.indexOf(s.id); return i < 0 ? 99 : i; }; return r(a) - r(b); });
 function renderRoster() {
   const chip = (cls, t) => `<span class="chipx ${cls}">${esc(t)}</span>`;
   $('#roster').innerHTML = `<div class="pagehead"><h2>Roster</h2><p>The seats on this desk. Each one has a job description, a list of things it refuses to do, and the human gates it answers to. These come from the live manifests.</p></div>
-    <div class="grid">${ROSTER_ORDER(S.data.seats).map(({ id, manifest: m, metrics: x }) => `
+    <div class="grid">${ROSTER_ORDER(S.data.seats).map(({ id, manifest: m, metrics: x, shadow }) => `
     <div class="seat ${m.location === 'patient_edge' ? 'edge' : ''}">
-      <div class="h">${AVATAR[id] ? `<img class="avatar" src="${AVATAR[id]}" alt="">` : `<span class="avatar">${INITIALS(m.name)}</span>`}<div><h3>${esc(m.name)}</h3><div class="role">${esc(m.role || '')}</div></div></div>
+      <div class="h">${AVATAR[id] ? `<img class="avatar" src="${AVATAR[id]}" alt="">` : `<span class="avatar">${INITIALS(m.name)}</span>`}<div><h3>${esc(m.name)}</h3><div class="role">${esc(m.role || '')}${shadow ? ' · shadow: no code runs it yet' : ''}</div></div></div>
       <div class="jd">${esc(m.job_description)}</div>
       ${(m.refuses || []).length ? `<div class="chips">${m.refuses.map((r) => chip('no', `never: ${r.replace(/_/g, ' ')}`)).join('')}</div>` : ''}
       ${(m.gates || []).length ? `<div class="chips">${m.gates.map((g) => chip('gate', `gate: ${g.replace(/_/g, ' ')}`)).join('')}</div>` : ''}
@@ -431,33 +439,66 @@ function renderRoster() {
 // ------------------------------------------------------------------ AGENT PAGE (read-only)
 function renderAgent() {
   const el = $('#agent'), seats = S.data.seats;
+  if (el.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') return; // don't wipe what is being typed
   if (!seats.some((s) => s.id === S.agentSel)) S.agentSel = seats[0].id;
   const s = seats.find((x) => x.id === S.agentSel), m = s.manifest;
-  const rows = [['Skills', m.skills], ['Tools', m.tools], ['Surfaces', m.surfaces], ['Refuses', m.refuses], ['Gates', m.gates], ['Talks to', m.a2a_peers], ['Sends', m.emits], ['Receives', m.consumes]];
+  const chips = (arr, cls = '') => (arr || []).length ? arr.map((v) => `<span class="chipx ${cls}">${esc(v)}</span>`).join('') : '<span class="hint">none</span>';
+  const rows = [['Skills', m.skills, 'sk'], ['Tools', m.tools, 'tl'], ['Surfaces', m.surfaces, ''], ['Refuses', m.refuses, 'no'], ['Gates', m.gates, 'gate'], ['Talks to', m.a2a_peers, ''], ['Sends', m.emits, ''], ['Receives', m.consumes, '']];
+  const mem = m.memory || {}, lay = (a) => (a || []).length ? a.map((n) => `<span class="chipx mem">L${esc(n)}</span>`).join('') : '<span class="hint">nothing</span>';
+  const json = esc(JSON.stringify(m, null, 2)).replace(/(&quot;(?:(?!&quot;).)*&quot;)(:)?|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?\b)/g,
+    (_, str, colon, kw, num) => str ? `<span class="${colon ? 'jk' : 'js'}">${str}</span>${colon || ''}` : kw ? `<span class="jb">${kw}</span>` : `<span class="jn">${num}</span>`);
   el.innerHTML = `<div class="pagehead"><h2>Agent page</h2><p>The job description is the configuration. This is what the seat is allowed to do, read straight from its manifest.</p></div>
     <div class="agent"><div class="panel">
-    <div style="display:flex;gap:8px;align-items:center"><h3 style="flex:1">${esc(m.name)}</h3><select id="ag-seat" aria-label="Seat">${seats.map((x) => `<option value="${x.id}" ${x.id === S.agentSel ? 'selected' : ''}>${esc(x.manifest.name)}</option>`).join('')}</select></div>
-    <div class="field">Job description<div style="font-size:13.5px;color:var(--text);background:var(--paper);border-radius:12px;padding:12px">${esc(m.job_description)}</div></div>
-    <div class="kv" style="font-size:12.5px;grid-template-columns:90px 1fr">${rows.map(([k, v]) => `<span class="k">${k}</span><span class="mono">${esc((v || []).join(', ') || 'none')}</span>`).join('')}<span class="k">Memory</span><span class="mono">reads L${esc((m.memory?.read || []).join(', L'))}; writes ${(m.memory?.write || []).length ? 'L' + esc(m.memory.write.join(', L')) : 'nothing'}</span></div>
-    <div class="notice" style="margin-top:14px">Read-only for now. Changing a duty, refusal or gate needs the Chief of Staff, which is not a running seat yet.</div>
-  </div><div class="panel"><h3>Manifest, version ${m.version}</h3><div class="code">${esc(JSON.stringify(m, null, 2))}</div></div></div>`;
+    <div class="ag-head">${AVATAR[s.id] ? `<img class="avatar" src="${AVATAR[s.id]}" alt="">` : `<span class="avatar">${INITIALS(m.name)}</span>`}
+      <div class="ag-t"><h3>${esc(m.name)}</h3><div class="ag-role">${esc(m.role || '')}</div>
+        <div class="ag-pills"><span class="pill">v${esc(m.version)}</span><span class="pill">${esc(String(m.location || '').replace(/_/g, ' '))}</span>${s.shadow ? '<span class="pill warn">shadow: no code runs it yet</span>' : '<span class="pill ok">running</span>'}</div></div>
+      <select id="ag-seat" aria-label="Seat">${seats.map((x) => `<option value="${x.id}" ${x.id === S.agentSel ? 'selected' : ''}>${esc(x.manifest.name)}</option>`).join('')}</select></div>
+    <div class="ag-sec">Job description</div><div class="quote">${esc(m.job_description)}</div>
+    <div class="ag-sec">What it can do</div>
+    <div class="attrs">${rows.map(([k, v, c]) => `<div class="attr"><span class="k">${k}</span><span class="v">${chips(v, c)}</span></div>`).join('')}
+      <div class="attr"><span class="k">Memory</span><span class="v"><span class="hint">reads</span>${lay(mem.read)}<span class="hint">writes</span>${lay(mem.write)}</span></div></div>
+    <div class="compose"><div class="ag-sec" style="margin-top:0">Change this seat</div>
+      <div class="field">Add a duty, refusal or gate, in plain language (compiled by the Chief of Staff)
+      <textarea id="ag-instr" rows="3" placeholder="e.g. Never diagnose a patient."></textarea></div>
+      <div><button class="btn primary" id="ag-compile">Compile, validate, hot-reload</button></div></div>
+  </div><div class="panel"><div class="ph"><h3>Manifest</h3><span class="pill">version ${esc(m.version)}</span></div><div class="code dark">${json}</div></div></div>`;
   $('#ag-seat').onchange = (e) => { S.agentSel = e.target.value; renderAgent(); };
+  $('#ag-compile').onclick = async () => {
+    const t = $('#ag-instr').value.trim(); if (!t) return;
+    try {
+      const r = await api(`/api/seats/${S.agentSel}/compile`, { instruction: t });
+      toast(r.version ? `${m.name} is now v${r.version}` : String(r.text).slice(0, 140));
+      $('#ag-instr').value = ''; document.activeElement.blur(); refresh();
+    } catch (e) { toast(e.message); }
+  };
 }
 
 // ------------------------------------------------------------------ MEMORY
+// Colour for an evidence kind, by family. Unknown kinds stay neutral.
+const KIND_RULES = [[/^(ct|imaging|image|scan|radiolog)/, 'k-img'], [/^(genom|dna|gene|variant)/, 'k-gen'], [/(red_flag|escalat|alert|violation|block|refus)/, 'k-alert'],
+  [/(decision|sign|rule|confirm|review|approv)/, 'k-dec'], [/^(data|lab|wearable|symptom|record|conversation|message|medication)/, 'k-data']];
+const kindCls = (k) => (KIND_RULES.find(([re]) => re.test(String(k))) || [, ''])[1];
 function renderMemory() {
   const mem = S.data.memory;
   const layers = [['L0', 'Medical knowledge and law', 'Guidelines (EAU, KDIGO), drug-disease rules. Same for everyone, read-only.'],
     ['L1', 'Specialty playbook', 'Nephro-oncology pathways and red-flag patterns. Read-only.'],
     ['L2', 'The hospital', 'Local protocols and routing precedents. Never leaves the hospital.'],
     ['L3', 'The patient', 'DNA, record, imaging, conversations and confirmed rules. One partition per patient.']];
+  const count = (l) => mem.filter((p) => p.layer === l).reduce((n, p) => n + p.evidence.length + p.knowledge.length, 0);
   const empty = S.data.light ? 'Light mode has no Cortex. Start the desk without --light to see memory.' : 'Memory is empty. Evidence appears as the seats work, and rules appear when a clinician signs a decision.';
   const kv = (k) => { const c = k.confidence_effective ?? k.conf_effective ?? k.confidence; return c == null ? '' : Number(c).toFixed(2); };
+  const stat = (k, v, t = '') => `<div class="stat ${t}"><span class="v">${esc(v)}</span><span class="k">${esc(k)}</span></div>`;
+  const part = (p) => {
+    const trial = p.knowledge.filter((k) => k.status === 'shadow').length, ok = p.chain.ok;
+    return `<div class="panel mpart"><div class="ph"><h3>${p.layer === 3 ? `Patient: ${esc(pname(p.partition))}` : `Hospital: ${esc(p.partition)}`}</h3>
+      <span class="chain ${ok ? '' : 'bad'}">${ok ? `Chain verified · ${p.chain.length} entries` : 'Chain broken'}</span></div>
+      <div class="stats sm">${stat('Evidence', p.evidence.length)}${stat('Rules', p.knowledge.length)}${stat('On trial', trial, trial ? 'warn' : '')}${stat('Integrity', ok ? 'OK' : 'Broken', ok ? 'ok' : 'bad')}</div>
+      <h4 class="tsec">Rules</h4><table class="t"><tr><th>Status</th><th>Rule</th><th>Confidence</th><th>Proposed by</th><th>Confirmed by</th></tr>${p.knowledge.map((k) => `<tr><td><span class="st ${esc(k.status)}">${esc(k.status === 'shadow' ? 'on trial' : k.status)}</span></td><td><b>${esc(ruleText(k.value))}</b><div class="mono">${esc(k.key)} v${esc(k.version)}</div></td><td>${esc(kv(k))}</td><td>${esc(k.proposed_by || k.source || '')}</td><td>${esc(k.decided_by || 'waiting')}</td></tr>`).join('') || '<tr><td colspan="5" class="hint">No rules yet.</td></tr>'}</table>
+      <h4 class="tsec">Evidence <small>append-only, hash-chained</small></h4><table class="t"><tr><th>#</th><th>Time</th><th>Kind</th><th>Source</th><th>Content hash</th><th>Chain hash</th></tr>${p.evidence.map((e) => `<tr><td class="seq">${esc(e.seq)}</td><td class="mono">${esc(String(e.recorded_at).slice(11, 19))}</td><td><span class="kind ${kindCls(e.kind)}">${esc(e.kind.replace(/_/g, ' '))}</span></td><td>${esc(e.source)}</td><td><span class="hash">${esc(e.content_sha256.slice(0, 10))}…</span></td><td><span class="hash">${esc(e.chain_hash.slice(0, 10))}…</span></td></tr>`).join('')}</table></div>`;
+  };
   $('#memory').innerHTML = `<div class="pagehead"><h2>Loop Cortex memory</h2><p>What the desk remembers, in four layers. Evidence is append-only and hash-chained. A new rule stays on trial until a clinician confirms it on the Board.</p></div>
-    <div class="memgrid"><div>${layers.map(([k, h, b]) => `<div class="layer ${k === 'L3' ? 'l3' : ''}"><span class="L">${k}</span><div><b>${h}</b><div style="font-size:12.5px;color:var(--muted)">${b}</div></div></div>`).join('')}</div>
-    <div>${mem.length ? mem.map((p) => `<div class="panel" style="margin-bottom:14px"><h3>${p.layer === 3 ? `Patient: ${esc(pname(p.partition))}` : `Hospital: ${esc(p.partition)}`} <span class="chain ${p.chain.ok ? '' : 'bad'}">${p.chain.ok ? `✓ chain verified, ${p.chain.length} entries` : 'chain broken'}</span></h3>
-      <h4 style="font-size:13.5px;margin-top:12px">Rules</h4><table class="t"><tr><th>Status</th><th>Rule</th><th>Confidence</th><th>Proposed by</th><th>Confirmed by</th></tr>${p.knowledge.map((k) => `<tr><td><span class="st ${esc(k.status)}">${esc(k.status === 'shadow' ? 'on trial' : k.status)}</span></td><td><b>${esc(ruleText(k.value))}</b><div class="mono">${esc(k.key)} v${esc(k.version)}</div></td><td>${esc(kv(k))}</td><td>${esc(k.proposed_by || k.source || '')}</td><td>${esc(k.decided_by || 'waiting')}</td></tr>`).join('') || '<tr><td colspan="5" class="hint">No rules yet.</td></tr>'}</table>
-      <h4 style="font-size:13.5px;margin-top:14px">Evidence</h4><table class="t"><tr><th>#</th><th>Time</th><th>Kind</th><th>Source</th><th>Content hash</th><th>Chain hash</th></tr>${p.evidence.map((e) => `<tr><td>${esc(e.seq)}</td><td>${esc(String(e.recorded_at).slice(11, 19))}</td><td>${esc(e.kind.replace(/_/g, ' '))}</td><td>${esc(e.source)}</td><td class="mono">${esc(e.content_sha256.slice(0, 12))}…</td><td class="mono">${esc(e.chain_hash.slice(0, 12))}…</td></tr>`).join('')}</table></div>`).join('') : `<div class="empty"><b>Nothing remembered yet</b>${empty}</div>`}</div></div>`;
+    <div class="memgrid"><div>${layers.map(([k, h, b]) => `<div class="layer ${k === 'L3' ? 'l3' : ''}" data-l="${k}"><span class="L">${k}</span><div style="flex:1"><b>${h}</b><div style="font-size:12.5px;color:var(--muted)">${b}</div></div>${count(+k[1]) ? `<span class="cnt" title="entries stored in this layer">${count(+k[1])}</span>` : ''}</div>`).join('')}</div>
+    <div>${mem.length ? mem.map(part).join('') : `<div class="empty"><b>Nothing remembered yet</b>${empty}</div>`}</div></div>`;
 }
 
 boot();
