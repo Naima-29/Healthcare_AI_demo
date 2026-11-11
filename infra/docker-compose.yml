@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: kcd
       POSTGRES_PASSWORD: kcd_dev
       POSTGRES_DB: kcd
-    ports: ["5432:5432"]
+    ports: ["${KCD_PG_PORT:-5432}:5432"]
     volumes: [pg:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kcd"]
