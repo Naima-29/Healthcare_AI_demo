@@ -1,5 +1,6 @@
-# Edge-node dev stack. Core code above runs without it (in-memory adapters);
-# this is what the Postgres / NATS adapters and other people's MCP servers target next.
+# Edge-node dev stack.
+#   docker compose -f infra/docker-compose.yml up -d postgres nats          # infra only (tests run against this)
+#   python scripts/gen_keys.py && docker compose -f infra/docker-compose.yml up -d --build core   # + the Core service
 # Dev-only credentials. Real deployments get secrets from Vault, never from this file.
 name: kcd
 
@@ -22,6 +23,29 @@ services:
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports: ["4222:4222", "8222:8222"]
     volumes: [nats:/data]
+
+  migrate:                      # one-shot: applies infra/migrations, then exits
+    build: {context: .., dockerfile: Dockerfile}
+    command: ["python", "-m", "kcd_core.migrate"]
+    environment:
+      KCD_DATABASE_URL: postgresql://kcd:kcd_dev@postgres:5432/kcd
+    depends_on: {postgres: {condition: service_healthy}}
+    restart: "no"
+
+  core:
+    build: {context: .., dockerfile: Dockerfile}
+    environment:
+      KCD_ENV: dev
+      KCD_DATABASE_URL: postgresql://kcd:kcd_dev@postgres:5432/kcd
+      KCD_NATS_URL: nats://nats:4222
+      KCD_KEYS_DIR: /keys
+      KCD_PAGER: log                 # webhook in staging/prod (see README: Deploying Core)
+    volumes: ["../keys:/keys:ro"]    # public keys of every seat; run scripts/gen_keys.py first
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      nats: {condition: service_started}
+    restart: unless-stopped
 
   minio:
     image: minio/minio:RELEASE.2024-10-13T13-34-11Z

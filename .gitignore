@@ -9,3 +9,4 @@ dist/
 .env
 *.pem
 *.key
+keys/

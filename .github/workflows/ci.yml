@@ -7,12 +7,24 @@ on:
 jobs:
   core:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_USER: kcd, POSTGRES_PASSWORD: kcd_dev, POSTGRES_DB: kcd_test}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kcd" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - name: NATS JetStream
+        run: docker run -d --name nats -p 4222:4222 nats:2.10-alpine -js
       - uses: astral-sh/setup-uv@v3
       - run: uv python install 3.12
-      - run: uv sync --frozen
+      - run: uv sync --frozen --all-extras
       - run: uv run ruff check .
       - run: uv run mypy
       - run: uv run python scripts/export_schemas.py --check
+      # Postgres and NATS are up, so the adapter and end-to-end tests run for real (locally they skip if absent).
       - run: uv run pytest -q
+      - name: Image builds
+        run: docker build -t kcd-core .

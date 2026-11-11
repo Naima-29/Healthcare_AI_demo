@@ -67,6 +67,18 @@ class ManifestRegistry:
         for listener in self._listeners:
             listener(manifest)
 
+    def undo_activation(self, seat: str) -> None:
+        """Take back the most recent activate() of `seat` without notifying listeners as a new version: used when
+        a freshly activated manifest fails validation afterwards. A brand-new seat is removed again."""
+        history = self._history.get(seat, [])
+        if history:
+            history.pop()
+        if history:
+            self._active[seat] = history[-1]
+        else:
+            self._active.pop(seat, None)
+            self._history.pop(seat, None)
+
     def rollback(self, seat: str) -> Manifest:
         history = self._history.get(seat, [])
         if len(history) < 2:

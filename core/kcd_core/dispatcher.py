@@ -39,6 +39,16 @@ class InMemoryIdempotencyStore:
         self._keys.add(key)
 
 
+class AtomicRouter(Protocol):
+    """Claim the idempotency key and queue the message for the receiver in ONE transaction (transactional outbox).
+
+    Returns False if the key was already claimed. With a router the dispatcher has no "published but not marked"
+    crash window: a crash before the commit re-runs the step, a crash after it is absorbed by the key.
+    """
+
+    async def route_once(self, key: str, subject: str, env: Envelope) -> bool: ...
+
+
 class GatePort(Protocol):
     """Gate service (review queue on the Clinical Board). Implemented with Person 5.
 
@@ -60,12 +70,14 @@ class Dispatcher:
         escalations: EscalationService,
         gates: GatePort,
         idempotency: IdempotencyStore | None = None,
+        router: AtomicRouter | None = None,
         default_unit: str = "uro_oncology",
     ) -> None:
         self.bus, self.registry, self.seat_keys = bus, registry, seat_keys
         self.audit, self.clock = audit, clock
         self.escalations, self.gates = escalations, gates
         self.idempotency = idempotency or InMemoryIdempotencyStore()
+        self.router = router
         self.default_unit = default_unit
 
     async def start(self) -> None:
@@ -90,11 +102,17 @@ class Dispatcher:
 
         if env.to == DISPATCHER:
             await self._consume(env)
+            self.idempotency.mark(env.idempotency_key)
+        elif self.router is not None:
+            if await self.router.route_once(env.idempotency_key, seat_inbox(env.to), env):
+                self._audit(env, "dispatch.routed", "allowed", {"to": env.to})
+            else:
+                self._audit(env, "dispatch.duplicate", "info")  # lost a race with another delivery of the same message
         else:
             await self.bus.publish(seat_inbox(env.to), env)
             self._audit(env, "dispatch.routed", "allowed", {"to": env.to})
-        # Marked only after delivery succeeded: if publish fails, the bus retry must not be dropped as a duplicate.
-        self.idempotency.mark(env.idempotency_key)
+            # Marked only after delivery succeeded: if publish fails, the bus retry must not be dropped as a duplicate.
+            self.idempotency.mark(env.idempotency_key)
 
     async def _consume(self, env: Envelope) -> None:
         if env.type == MessageType.CASE_PACK_READY:

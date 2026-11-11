@@ -31,6 +31,12 @@ uv run python scripts/import_demo_manifests.py  # re-import seat manifests after
 | `core/kcd_core/bus.py` | `Bus` port + `InMemoryBus` (retry with backoff, dead-letter) |
 | `core/kcd_core/signing.py` | Ed25519 over RFC 8785 canonical JSON, for envelopes and clinician releases |
 | `core/kcd_core/audit.py` | Hash-chained audit events |
+| `core/kcd_core/adapters/` | `NatsJetStreamBus`, Postgres stores (audit, idempotency, escalations, rota, gate queue), transactional outbox + relay |
+| `core/kcd_core/service.py`, `settings.py`, `workers.py`, `pagers.py` | The deployable process, env config with fail-fast checks, background loops, log/webhook pagers |
+| `core/kcd_core/control_plane.py`, `api.py` | Propose / approve / rollback manifests, store, reloader; HTTP + OIDC auth (fail closed) |
+| `core/kcd_core/chief_of_staff/diff.py`, `llm.py` | Field-level manifest diff; LLM draft step constrained by deterministic code |
+| `core/kcd_core/connectors/` | MCP connector template, `oncall` and `fhir` reference servers, bridge into `ToolRegistry` |
+| `core/kcd_core/migrate.py`, `infra/migrations/` | Checksummed SQL migrations (001 draft, 002 hardening) |
 | `infra/docker-compose.yml` | Dev edge stack (Postgres+pgvector, NATS JetStream, MinIO, Ollama, HAPI FHIR, Orthanc) |
 
 ## Writing a seat (Persons 2 to 5)
@@ -94,9 +100,61 @@ The rules the runtime enforces, so a seat cannot get them wrong:
 10. **One reviewed override of the demo seeds:** the Companion refuses `disclose_imaging_before_review` from
     day one (the demo adds it live on stage). Overrides live in `scripts/import_demo_manifests.py`.
 
-## Next (Core)
+## Running Core (infrastructure, deployment)
 
-- `NatsJetStreamBus` + transactional outbox in Postgres; Postgres stores for audit, idempotency, escalations
-- MCP connector template + `oncall` and `fhir` reference servers
-- Chief of Staff: LLM draft step behind `enforce_floor`, Director approval API, manifest diff for the console
-- Escalation `tick()` worker using `SELECT … FOR UPDATE SKIP LOCKED`; real pager behind a feature flag
+Everything below is exercised by the test suite against a real Postgres 16 and NATS JetStream.
+
+```bash
+docker compose -f infra/docker-compose.yml up -d postgres nats        # infra for tests and local runs
+uv sync --all-extras && uv run pytest                                  # adapter + end-to-end tests run for real
+python scripts/gen_keys.py                                             # dev keypairs for every seat -> ./keys (git-ignored)
+docker compose -f infra/docker-compose.yml up -d --build core          # migrate (one-shot) -> core service on :8000
+curl localhost:8000/readyz                                             # {"database":true,"bus":true,...}
+```
+
+`python -m kcd_core.service` runs the dispatcher, outbox relay, escalation worker, manifest reloader and the HTTP
+server (`/healthz` liveness, `/readyz` readiness, `/v1/manifests/*` Director API). `python -m kcd_core.migrate`
+applies `infra/migrations` (checksummed, advisory-locked, safe to run from every replica).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `KCD_ENV` | `dev` | `staging`/`prod` refuse to start with the log pager, a dev token, the dev DB password, or (prod) < 3 JetStream replicas |
+| `KCD_DATABASE_URL`, `KCD_NATS_URL` | local dev | |
+| `KCD_KEYS_DIR` | `keys` | `<seat>.pub` for every seat (dispatcher); `<seat>.key` (mode 600) only where that seat runs |
+| `KCD_PAGER` | `log` | `webhook` needs `KCD_PAGER_URL` + `KCD_PAGER_SECRET` (HMAC-SHA256 in `X-KCD-Signature`) |
+| `KCD_OIDC_ISSUER/AUDIENCE/JWKS_URL` | unset | unset = the control-plane API answers 401 to everything (fail closed) |
+| `KCD_LLM_BASE_URL`, `KCD_LLM_MODEL` | unset | OpenAI-compatible endpoint for the Chief of Staff draft step; unset = rule-based drafts |
+| `KCD_MIGRATE_ON_START` | `false` | convenient for dev; production runs the `migrate` job first |
+
+### Delivery guarantees (what to rely on, what not to)
+
+- **At-least-once everywhere, duplicates absorbed by idempotency keys.** A duplicate page is acceptable, a missing page is not.
+- **Dispatcher**: the idempotency mark and the outbound message commit in one Postgres transaction (transactional outbox); a relay publishes with a JetStream message id (`<envelope id>@<subject>`; the subject is part of it because the same envelope legitimately crosses two hops).
+- **Not ordered.** A failing outbox row backs off alone; later rows go past it, because head-of-line blocking a red flag is worse than reordering. Nothing in the protocol depends on order.
+- **Dead letters are durable** (`KCD_DLQ` stream, `dlq.<subject>`, error and attempts in headers). If the dead-letter write itself fails, the message is nak'd, never dropped. Alert on stream depth and on `/readyz` `outbox_dead`.
+- **Escalations never go silent**: a failed page, a rota outage, nobody on call, or a crashed worker all climb the ladder; workers claim rows with `FOR UPDATE SKIP LOCKED` + a lease; terminal states are compare-and-set so a late tick cannot un-acknowledge.
+- **Audit is append-only in the database** (triggers reject UPDATE/DELETE/TRUNCATE) and hash-chained (`verify_chain()` still catches an owner who disables the triggers).
+- **Sync ports on purpose.** The Core ports are synchronous so seat authors keep a simple contract; adapters use short statements with connect/statement timeouts, and the background loops use threads. Moving the ports to async later is a mechanical change.
+
+### Control plane (Chief of Staff)
+
+Propose (`POST /v1/manifests/drafts`) -> the response carries a field-level diff with `[WIDENS]` / `[LOOSENS]` flags ->
+Director approves (`.../approve`) -> catalogue + topology check -> stored -> every process converges via
+`ManifestReloader` (no restart). A draft made against an older live version is refused as stale. The LLM step can
+only shape tools, surfaces, refusals, gates and wording; routes, memory, cloud fallback and the seat's identity come
+from trusted code, and `enforce_floor` means it can add restrictions but never remove one.
+
+### Connectors (`kcd_core/connectors`)
+
+`base.py` is the template (steps in its docstring). `oncall.py` and `fhir.py` are reference servers whose tool names
+and call shapes match the catalogue and the seats (`patient=`, `code="eGFR"`). `bridge.bind_session` plugs any MCP
+session into a seat's `ToolRegistry`; the PEP still decides every call before it reaches a connector.
+Run one: `KCD_FHIR_URL=http://localhost:8080/fhir python -m kcd_core.connectors.fhir`.
+
+## Known gaps (deliberately not done here)
+
+- Ed25519 seat keys are read from files; wiring them to Vault/KMS is a deployment task.
+- The gate service is a durable queue (`gate_item`) until the Board owner's service replaces `PostgresGateQueue`.
+- No metrics endpoint yet; `/readyz` exposes outbox depth and dead rows as the minimum.
+- Nothing here has run on a multi-node NATS cluster (replicas > 1) or behind a real Keycloak/paging gateway.
+- The Dockerfile and CI workflow were written and simulated (clean install, migrate, boot, SIGTERM) but not built with Docker in this environment.
