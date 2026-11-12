@@ -213,8 +213,8 @@ class EdgeCases:
         self.companion.lab_reports[PATIENT] = self.lab["lab-photo-ok.json"]
 
         plural = self.km.classify_drug("I take NSAIDs sometimes")
-        self.check(area, "B4 'NSAIDs' (plural)", "KNOWN GAP: not recognised as a drug (raised with Diana)",
-                   f"classified as {plural}", plural is None)
+        self.check(area, "B4 'NSAIDs' (plural)", "recognised as an NSAID",
+                   f"classified as {plural}", plural is not None and plural["class"] == "NSAID")
 
     # ------------------------------------------------------------------ C. imaging
     async def imaging(self) -> None:
