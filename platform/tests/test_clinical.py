@@ -114,6 +114,35 @@ class RenalGuardianTest(unittest.IsolatedAsyncioTestCase):
         await self.send(MessageType.DATA_DELIVERED, LAB)
         self.assertEqual(self.out(), [])
 
+    async def test_every_conflict_rule_that_applies_is_sent(self):
+        data = copy.deepcopy(KM.data)
+        second = copy.deepcopy(data["conflict_rules"][0])
+        second["id"] = "nsaid_second_rule"
+        data["conflict_rules"].append(second)
+        (self.root / "pt_marco").mkdir(exist_ok=True)
+        (self.root / "pt_marco" / "fhir-bundle.json").write_text(json.dumps(bundle(egfr_date="2026-10-01", egfr=56)))
+        await self.desk.add_seat(RenalGuardian(), clinical_tools(FolderFhir(self.root), KnowledgeModel(data),
+                                                                 self.desk.clock.now, {"pt_marco": {"sbp": 148}}))
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+        self.assertEqual([e.payload["rule_id"] for e in self.out()], ["nsaid_renal_and_blood_pressure",
+                                                                       "nsaid_second_rule"])
+
+    async def test_second_medication_while_waiting_does_not_replace_the_first(self):
+        await self.start(bundle(egfr_date="2026-06-12"))              # stale: both wait for the lab report
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+        await self.send(MessageType.MEDICATION_REPORT, {"drug": "paracetamol", "class": "non_NSAID_analgesic"})
+        self.assertEqual([e.type for e in self.out()], [MessageType.DATA_REQUEST])   # asked once, not twice
+        await self.send(MessageType.DATA_DELIVERED, LAB)
+        self.assertEqual([e.type for e in self.out()], [MessageType.DATA_REQUEST, MessageType.THERAPY_CONFLICT])
+        self.assertEqual(self.out()[-1].payload["data_freshness"]["egfr"], 52)
+
+    async def test_two_nsaids_give_one_conflict(self):
+        await self.start(bundle(egfr_date="2026-06-12"))
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+        await self.send(MessageType.MEDICATION_REPORT, {"drug": "diclofenac", "class": "NSAID"})
+        await self.send(MessageType.DATA_DELIVERED, LAB)
+        self.assertEqual([e.type for e in self.out()], [MessageType.DATA_REQUEST, MessageType.THERAPY_CONFLICT])
+
     async def test_policy(self):
         await self.start(bundle())
         ctx = self.rt.context()
