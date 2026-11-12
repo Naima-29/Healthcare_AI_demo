@@ -24,7 +24,7 @@
       "names": [
         "ibuprofen", "ibuprofene", "ibuprofeno", "brufen", "moment", "nurofen",
         "ketoprofen", "ketoprofene", "ketoprofeno", "oki", "diclofenac", "voltaren",
-        "naprossene", "naproxen", "aspirin", "aspirina", "aspirine", "nsaid", "fans"
+        "naprossene", "naproxen", "aspirin", "aspirina", "aspirine", "nsaid", "nsaids", "fans"
       ],
       "needs_review": {
         "moment": "Also an ordinary English word, so it can match normal sentences.",
