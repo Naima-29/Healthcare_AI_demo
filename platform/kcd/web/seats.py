@@ -33,25 +33,61 @@ RULE_NSAID = {
           "For pain, follow the plan your doctor gave you.",
 }
 
-class WebChannel:
-    """The patient's phone on screen, in place of Telegram (kcd/patient/channel.py)."""
 
-    def __init__(self, hub: Hub):
+class WebChannel:
+    """The browser patient channel, with optional Telegram delivery."""
+
+    def __init__(self, hub: Hub, telegram: Any = None):
         self.hub = hub
+        self.telegram = telegram
 
     async def send(self, patient_id: str, text: str) -> dict[str, Any]:
+        # Always publish to the browser first.
         self.hub.publish("patient_out", {"patient": patient_id, "text": text})
+
+        if self.telegram is None:
+            return {"delivered": True, "transport": "web"}
+
+        try:
+            result = await self.telegram.send(patient_id, text)
+        except Exception:
+            # A Telegram failure must not prevent browser delivery.
+            self.hub.publish(
+                "error",
+                {
+                    "seat": "companion",
+                    "message": "Telegram delivery failed; browser delivery is still available.",
+                },
+            )
+            return {"delivered": True, "transport": "web"}
+
+        if result.get("transport") == "telegram":
+            return {"delivered": True, "transport": "web+telegram"}
+
         return {"delivered": True, "transport": "web"}
 
 
+
 class WebCompanion(Companion):
-    def __init__(self, km: Any, hub: Hub, cortex: Any, *, history_rcc: Callable[[str], bool],
-                 name_of: Callable[[str], str]):
-        super().__init__(km, history_provider=lambda patient: {"rcc": history_rcc(patient)})
-        self.hub, self.cortex, self.name_of = hub, cortex, name_of
+    def __init__(
+        self,
+        km: Any,
+        hub: Hub,
+        cortex: Any,
+        *,
+        history_rcc: Callable[[str], bool],
+        name_of: Callable[[str], str],
+    ):
+        super().__init__(
+            km,
+            history_provider=lambda patient: {"rcc": history_rcc(patient)},
+            cortex=cortex,
+        )
+        self.hub = hub
+        self.cortex = cortex
+        self.name_of = name_of
         self.episodes: dict[str, int] = {}
         self.awaiting_lab: set[str] = set()
-        self.released_rules: dict[tuple[str, str], tuple[str, Release, str]] = {}  # (patient, key) -> hash, release, who
 
     def new_episode(self, patient: str) -> None:
         """Core drops an identical message within an episode as a redelivery, so a real repeat needs a new episode."""
@@ -66,36 +102,89 @@ class WebCompanion(Companion):
     def episode(self, patient: str) -> str:
         return f"ep-{patient}-{self.episodes.get(patient, 1)}"
 
-    # ------------------------------------------------------------------ the patient door
-    async def on_text(self, ctx: SeatContext, patient: str, text: str, features: dict[str, Any] | None) -> None:
-        self.hub.publish("patient_in", {"patient": patient, "text": text})
-        parsed = extract(text, self.km.classify_drug)
-        for intent, action in (("ask_imaging_result", "patient.disclose_imaging"),
-                               ("ask_genetics", "patient.disclose_genetics")):
-            if intent in parsed["intents"]:
-                try:
-                    ctx.act(action)  # blocked by the manifest's refusal: audited and shown as such
-                except PolicyViolation:
-                    pass
-        session = self.session(patient)
-        drug = parsed["drug"]
-        if drug and drug["class"] == "NSAID" and self._rule_active(ctx, patient):
-            session.language = parsed["language"]
-            artifact_hash, release, who = self.released_rules[(patient, NSAID_RULE)]
-            ctx.guard_content("dose_instruction", artifact_hash, release)  # only with the clinician's release
-            await self._say(ctx, patient, RULE_NSAID[session.language].format(who=who))
-            return
-        before = session.distress
-        await self.on_patient_text(ctx, patient_id=patient, episode_id=self.episode(patient), text=text,
-                                   features=features)
-        if session.distress is not before:
-            self.hub.publish("humanized", {"patient": patient, **session.distress})
+    def has_wearables_consent(self, patient_id: str) -> bool:
+        return self.session(patient_id).wearables_consent
 
-    def _rule_active(self, ctx: SeatContext, patient: str) -> bool:
-        if (patient, NSAID_RULE) not in self.released_rules:
+
+    async def _handle_wearables_consent(self, ctx, patient_id: str, text: str) -> bool:
+        session = self.session(patient_id)
+        message = text.strip().lower()
+
+        # Allow the patient to withdraw consent at any time.
+        withdrawal_phrases = (
+            "withdraw consent",
+            "stop sharing wearable data",
+            "stop sharing my wearable data",
+            "revoke consent",
+            "non condividere più i miei dati",
+            "revoco il consenso",
+        )
+
+        if any(phrase in message for phrase in withdrawal_phrases):
+            session.wearables_consent = False
+            session.awaiting_wearables_consent = False
+            await self._say(
+                ctx, patient_id,
+                "Your wearable-data consent has been withdrawn. "
+                "I will not access your wearable data."
+            )
+            return True
+
+        if not session.awaiting_wearables_consent:
             return False
-        ctx.check_memory(3, "read")
-        return any(k["key"] == NSAID_RULE for k in self.cortex.active_rules([(3, patient)]))
+
+        yes = {"yes", "yes, i agree", "i agree", "consent", "si", "sì", "acconsento"}
+        no = {"no", "no, i don't agree", "i do not agree", "non", "non acconsento"}
+
+        if message in yes:
+            session.wearables_consent = True
+            session.awaiting_wearables_consent = False
+            await self._say(
+                ctx, patient_id,
+                "Thank you. You have agreed to wearable-data access."
+            )
+            return True
+
+        if message in no:
+            session.wearables_consent = False
+            session.awaiting_wearables_consent = False
+            await self._say(
+                ctx, patient_id,
+                "Understood. I will not access your wearable data."
+            )
+            return True
+
+        return False
+
+    # ------------------------------------------------------------------ the patient door
+    async def on_text(
+        self,
+        ctx: SeatContext,
+        patient: str,
+        text: str,
+        features: dict[str, Any] | None,
+    ) -> None:
+        self.hub.publish("patient_in", {"patient": patient, "text": text})
+        handled = await self._handle_wearables_consent(ctx, patient, text)
+        if handled:
+            return
+
+        session = self.session(patient)
+        before = session.distress
+
+        await self.on_patient_text(
+            ctx,
+            patient_id=patient,
+            episode_id=self.episode(patient),
+            text=text,
+            features=features,
+        )
+
+        if session.distress is not before:
+            self.hub.publish(
+                "humanized",
+                {"patient": patient, **session.distress},
+            )
 
     async def on_lab_photo(self, ctx: SeatContext, patient: str, photo: dict[str, Any]) -> None:
         self.hub.publish("patient_in", {"patient": patient, "text": "📷 [photo of lab report]"})
@@ -103,10 +192,38 @@ class WebCompanion(Companion):
         await self.attach_lab_report(ctx, patient_id=patient, episode_id=self.episode(patient),
                                      ocr_text=json.dumps(photo))
 
+    
+    async def on_lab_photo_ocr(
+        self,
+        ctx: SeatContext,
+        patient: str,
+        ocr_text: str,
+    ) -> None:
+        """Handle a Telegram lab photo after OCR has extracted its text."""
+        self.hub.publish(
+            "patient_in",
+            {"patient": patient, "text": "📷 [lab report photo received]"},
+        )
+
+        self.awaiting_lab.discard(patient)
+
+        await self.attach_lab_report(
+            ctx,
+            patient_id=patient,
+            episode_id=self.episode(patient),
+            ocr_text=ocr_text,
+        )
+
+
     # ------------------------------------------------------------------ from the hospital
     async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
-        if isinstance(payload, DataRequest) and payload.ask_patient:
+        if (
+            isinstance(payload, DataRequest)
+            and payload.ask_patient
+            and payload.what != "wearable_data_consent"
+        ):
             self.awaiting_lab.add(env.patient_id)
+
         await super().handle(env, payload, ctx)
 
     async def _deliver_signed_decision(self, ctx: SeatContext, patient_id: str, decision: ClinicianDecision) -> None:

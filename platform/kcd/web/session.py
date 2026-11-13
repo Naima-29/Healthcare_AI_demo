@@ -54,6 +54,7 @@ from kcd.util import sha256_hex
 from kcd.web.board import Metrics, ObservedAudit, ObservedBus, RunningClock, for_browser
 from kcd.web.hub import Hub
 from kcd.web.seats import NSAID_RULE, WebCaseBriefer, WebChannel, WebCompanion, WebVerifier
+from kcd.patient.channel import PatientChannel
 
 MARCO, SOFIA = "marco-r", "sofia-b"
 PATIENTS = (MARCO, SOFIA)
@@ -133,6 +134,8 @@ class Session:
         self.ct_mode = "stub"
         self.imaging_lock = asyncio.Lock()
         self.tasks: set[asyncio.Task] = set()
+        self.telegram = PatientChannel.from_env()
+        self.telegram_stop = asyncio.Event()
         self.busy = False
         self.done_steps: set[tuple[str, int]] = set()
         self.running: tuple[int, str] | None = None
@@ -184,11 +187,18 @@ class Session:
         verifier = WebVerifier(now=self.clock.now, on_result=self._on_verification)
         wearables = {MARCO: HOME_BP, SOFIA: {"sbp": 152, "dbp": 94}}
         self.rt = {
-            "companion": await desk.add_seat(self.companion, companion_tools(self.km, WebChannel(hub), wearables=wearables)),
+            "companion": await desk.add_seat(
+                self.companion,
+                companion_tools(
+                    self.km,
+                    WebChannel(hub, telegram=self.telegram),
+                    wearables=wearables,
+                    wearables_consent=self.companion.has_wearables_consent,
+                ),
+            ),
             "case_briefer": await desk.add_seat(self.briefer, briefer_tools(self.fhir, self.km, self.clock.now,
                                                                             self.board.create_item)),
-            "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(self.fhir, self.km, self.clock.now,
-                                                                                  wearables)),
+            "renal_guardian": await desk.add_seat(RenalGuardian(), clinical_tools(self.fhir,self.km,self.clock.now,wearables,wearables_consent=self.companion.has_wearables_consent,),),
             "safety_verifier": await desk.add_seat(verifier, clinical_tools(self.fhir, self.km, self.clock.now)),
             "imaging_reader": await desk.add_seat(self.reader, imaging_tools(self.pacs, self.switch), timeout_s=300),
             "genomics_interpreter": await desk.add_seat(GenomicsInterpreter(self.cortex),
@@ -196,8 +206,23 @@ class Session:
             "archivist": await desk.add_seat(self.archivist, board_tools(self.board.create_item)),
         }
         self.ticker = asyncio.create_task(self._tick_escalations(), name="escalation-ticker")
+        if self.telegram.token and self.telegram.chat_by_patient:
+            self.spawn(
+                self.telegram.poll_updates(
+                    self._on_telegram_message,
+                    self.telegram_stop,
+                )
+            )
+            self.hub.publish(
+                "note",
+                {
+                    "seat": "companion",
+                    "text": "Telegram patient channel connected.",
+                },
+            )
 
     async def close(self) -> None:
+        self.telegram_stop.set()
         self.ticker.cancel()
         for task in list(self.tasks):
             task.cancel()
@@ -303,6 +328,120 @@ class Session:
                         "meaning": "Kept out of the case pack. The seat that produced it was told."})
 
     # ------------------------------------------------------------------ patient door
+
+    async def _on_telegram_message(
+        self,
+        patient_id: str,
+        text: str,
+        metadata: dict[str, Any],
+    ) -> None:
+        kind = metadata.get("kind", "text")
+
+        if kind == "photo":
+            file_id = metadata.get("file_id")
+
+            if not file_id:
+                self.hub.publish(
+                    "note",
+                    {
+                        "seat": "companion",
+                        "text": "Telegram photo received without a file ID.",
+                    },
+                )
+                return
+
+            try:
+                from kcd.patient.ocr import extract_text_from_bytes
+
+                print("[Photo handler] Downloading photo...", flush=True)
+                image_bytes = await self.telegram.download_photo(file_id)
+                print("[Photo handler] Photo downloaded:", len(image_bytes), "bytes", flush=True)
+
+                print("[OCR] Starting text extraction...", flush=True)
+                ocr_text = extract_text_from_bytes(image_bytes)
+                print("[OCR] Extracted text:", repr(ocr_text), flush=True)
+
+                print("[Photo handler] Sending OCR text to Companion...", flush=True)
+
+                await self.companion.attach_lab_report(
+                    self._ctx("companion"),
+                    patient_id=patient_id,
+                    episode_id=self.companion.episode(patient_id),
+                    ocr_text=ocr_text,
+                )
+
+                print("[Photo handler] Companion processing finished.", flush=True)
+
+                await self.drain()
+
+                print("[Photo handler] Drain finished.", flush=True)
+                print("[Photo handler] Processing completed.", flush=True)
+
+            except Exception as exc:
+                self.hub.publish(
+                    "note",
+                    {
+                        "seat": "companion",
+                        "text": f"Could not process Telegram lab photo: {exc}",
+                    },
+                )
+            return
+
+
+        if kind == "voice":
+            file_id = metadata.get("file_id")
+            print("[Voice handler] Received voice file ID:", bool(file_id))
+
+            if not file_id:
+                self.hub.publish(
+                    "note",
+                    {
+                        "seat": "companion",
+                        "text": "Telegram voice message received without a file ID.",
+                    },
+                )
+                return
+
+            try:
+                from kcd.patient.transcription import transcribe_audio
+
+                audio_bytes = await self.telegram.download_voice(file_id)
+                print("[Voice handler] Audio downloaded:", len(audio_bytes), "bytes")
+                transcript = await asyncio.to_thread(
+                    transcribe_audio,
+                    audio_bytes,
+                )
+                print("[Voice handler] Transcript:", transcript)
+
+                await self.patient_message(transcript, None, patient_id)
+
+            except Exception as exc:
+                self.hub.publish(
+                    "note",
+                    {
+                        "seat": "companion",
+                        "text": f"Could not transcribe Telegram voice message: {exc}",
+                    },
+                )
+            return
+
+        if kind != "text":
+            self.hub.publish(
+                "note",
+                {
+                    "seat": "companion",
+                    "text": f"Telegram {kind} received, but media processing is not configured yet.",
+                },
+            )
+            return
+
+
+        if not text.strip():
+            return
+
+        await self.patient_message(text, None, patient_id)
+
+
     def _patient(self, patient: str | None) -> str:
         chosen = patient or self.active
         if chosen not in PATIENTS:
@@ -485,13 +624,37 @@ class Session:
                                   "verified": True, "patient": item.get("patient_id")})
         self.hub.publish("memory", {"patient": item.get("patient_id")})
 
-    def _confirm_rule(self, rule_id: str, clinician_id: str, role: str, release: Release | None, _reason: Any) -> None:
-        rule = self.cortex.confirm(rule_id, HumanActor(clinician_id, role, release))
+    def _confirm_rule(
+        self,
+        rule_id: str,
+        clinician_id: str,
+        role: str,
+        release: Release | None,
+        _reason: Any,
+    ) -> None:
+        rule = self.cortex.confirm(
+            rule_id,
+            HumanActor(clinician_id, role, release),
+        )
+
         if rule["key"] == NSAID_RULE and release is not None:
-            # The Companion may repeat the rule to the patient: a release for that dose instruction, same clinician.
-            c = BY_ID[clinician_id]
-            spoken = self._release(c, rule_id, release.artifact_hash, ["dose_instruction"])
-            self.companion.released_rules[(rule["partition"], rule["key"])] = (release.artifact_hash, spoken, c.name)
+            # Create a separate signed release for the patient-facing instruction.
+            clinician = BY_ID[clinician_id]
+
+            spoken = self._release(
+                clinician,
+                rule_id,
+                release.artifact_hash,
+                ["dose_instruction"],
+            )
+
+            self.companion.register_confirmed_rule(
+                patient_id=rule["partition"],
+                rule_key=rule["key"],
+                artifact_hash=release.artifact_hash,
+                release=spoken,
+                clinician_name=clinician.name,
+            )
 
     def _reject_rule(self, rule_id: str, clinician_id: str, role: str, release: Release | None, reason: Any) -> None:
         self.cortex.reject(rule_id, HumanActor(clinician_id, role, release), str(reason or "rejected on the Board"))

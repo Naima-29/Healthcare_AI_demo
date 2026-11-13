@@ -90,8 +90,13 @@ class CoreMemory:
         self._check(HOSPITAL, "read")
         return self._cortex.list_knowledge(HOSPITAL, self.hospital, status)
 
+    def active_patient_rules(self) -> list[dict]:
+        """Confirmed, still-confident rules for this patient only."""
+        self._check(PATIENT, "read")
+        return self._cortex.active_rules([(PATIENT, self.patient_id)])
+
     def active_rules(self) -> list[dict]:
-        """Confirmed, still-confident rules for this patient (layer 3) and their hospital (layer 2)."""
+        """Confirmed, still-confident rules for this patient and their hospital."""
         self._check(PATIENT, "read")
         self._check(HOSPITAL, "read")
         return self._cortex.active_rules([(PATIENT, self.patient_id), (HOSPITAL, self.hospital)])

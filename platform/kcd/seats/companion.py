@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from kcd_core.contracts import Envelope, MessageType
+from kcd_core.pep import PolicyViolation
 from kcd_core.contracts.messages import (
     ClinicianDecision,
     DataDelivered,
@@ -26,10 +27,25 @@ from kcd_core.contracts.messages import (
 )
 from kcd_core.runtime import Seat, SeatContext
 from pydantic import BaseModel
-
+from kcd.cortex import CoreMemory
 from kcd.knowledge import KnowledgeModel
 from kcd.patient.fuzzy import from_features
 from kcd.patient.nlu import extract
+
+NSAID_RULE = "avoid_drug_class:NSAID"
+
+RULE_NSAID = {
+    "it": (
+        "Il suo nefrologo ({who}) le ha indicato di evitare "
+        "l’ibuprofene e gli antinfiammatori simili. "
+        "Per il dolore segua il piano che le ha dato il medico."
+    ),
+    "en": (
+        "Your nephrologist ({who}) asked you to avoid ibuprofen "
+        "and similar anti-inflammatory painkillers. "
+        "For pain, follow the plan your doctor gave you."
+    ),
+}
 
 TEXT = {
     "en": {
@@ -123,6 +139,8 @@ class PatientSession:
     red_flag_sent: bool = False
     reported: bool = False
     transcript: list[str] = field(default_factory=list)
+    wearables_consent: bool = False
+    awaiting_wearables_consent: bool = False
 
 
 def parse_lab_report(ocr_text: str) -> dict[str, Any]:
@@ -152,6 +170,7 @@ def companion_tools(
     channel: Any,
     *,
     wearables: dict[str, dict[str, Any]] | None = None,
+    wearables_consent: Callable[[str], bool] | None = None,
 ) -> dict[str, Callable[..., Any]]:
     """Build local tool adapters; production deployments replace them with MCP clients."""
     summaries = dict(wearables or {})
@@ -168,6 +187,12 @@ def companion_tools(
     async def read_wearables(*, patient_id: str, days: int = 7) -> dict[str, Any]:
         if not 1 <= int(days) <= 90:
             raise ValueError("days must be between 1 and 90")
+
+        if wearables_consent is None or not wearables_consent(patient_id):
+            raise PermissionError(
+                "explicit patient consent is required before reading wearables"
+            )
+
         return {"summary": dict(summaries.get(patient_id, {})), "days": int(days)}
 
     return {
@@ -187,18 +212,52 @@ class Companion(Seat):
         *,
         demo_lab_reports: dict[str, dict[str, Any] | str] | None = None,
         history_provider: Callable[[str], dict[str, Any]] | None = None,
+        cortex: Any | None = None,
     ) -> None:
         self.km = km
         self.demo_lab_reports = dict(demo_lab_reports or {})
         self.history_provider = history_provider
+        self.cortex = cortex
         self.sessions: dict[str, PatientSession] = {}
         self.told_patient: list[dict[str, Any]] = []
         self.asked_patient: list[str] = []
+        self.released_rules: dict[tuple[str, str], tuple[str, Any, str]] = {}
 
     def session(self, patient_id: str) -> PatientSession:
         if patient_id not in self.sessions:
             self.sessions[patient_id] = PatientSession()
         return self.sessions[patient_id]
+
+    def register_confirmed_rule(
+        self,
+        patient_id: str,
+        rule_key: str,
+        artifact_hash: str,
+        release: Any,
+        clinician_name: str,
+    ) -> None:
+        """Store a rule release supplied after clinician confirmation."""
+        self.released_rules[(patient_id, rule_key)] = (
+            artifact_hash,
+            release,
+            clinician_name,
+        )
+
+    def _confirmed_rule_active(
+        self,
+        ctx: SeatContext,
+        patient_id: str,
+        rule_key: str,
+    ) -> bool:
+        if self.cortex is None or (patient_id, rule_key) not in self.released_rules:
+            return False
+
+        mem = CoreMemory(self.cortex, ctx, self.seat_id, patient_id)
+
+        return any(
+            rule["key"] == rule_key
+            for rule in mem.active_patient_rules()
+        )
 
     async def _say(self, ctx: SeatContext, patient_id: str, text: str) -> None:
         await ctx.tool("channel.send", patient_id=patient_id, text=text)
@@ -207,9 +266,23 @@ class Companion(Seat):
         if isinstance(payload, DataRequest):
             if payload.ask_patient:
                 self.asked_patient.append(payload.ask_patient)
+
+                if payload.what == "wearable_data_consent":
+                    session = self.session(env.patient_id)
+                    session.awaiting_wearables_consent = True
+                    await self._say(
+                        ctx,
+                        env.patient_id,
+                        "Your care team would like permission to access your wearable data "
+                        "(such as heart rate and blood pressure) to support your care. "
+                        "Do you agree? Please reply yes or no. You can withdraw consent at any time.",
+                    )
+                    return
+
                 session = self.session(env.patient_id)
                 prompt = TEXT[session.language]["lab_ask"]
                 await self._say(ctx, env.patient_id, prompt)
+
                 # The golden path may inject a synthetic upload to exercise the existing Renal Guardian flow.
                 demo_report = self.demo_lab_reports.get(env.patient_id)
                 if demo_report is not None:
@@ -269,33 +342,85 @@ class Companion(Seat):
             if session.distress is None or distress["score"] >= session.distress["score"] or features:
                 session.distress = distress
 
+        for intent, action in (
+            ("ask_imaging_result", "patient.disclose_imaging"),
+            ("ask_genetics", "patient.disclose_genetics"),
+        ):
+            if intent in parsed["intents"]:
+                try:
+                    ctx.act(action)
+                except PolicyViolation:
+                    pass
+
         if "ask_imaging_result" in parsed["intents"]:
             await self._say(ctx, patient_id, lang["imaging_hold"])
             return
+
         if "ask_genetics" in parsed["intents"]:
             await self._say(ctx, patient_id, lang["genetics_hold"])
             return
 
-        if parsed["drug"]:
-            await self.report_medication(
-                ctx, patient_id=patient_id, episode_id=episode_id, text=text, drug=parsed["drug"]
-            )
-            await self._say(ctx, patient_id, lang["med_ack"])
-            return
+        medication_reported = False
+        rule_reply_sent = False
+        drug = parsed["drug"]
 
+        if drug and drug.get("class") == "NSAID" and self._confirmed_rule_active(
+            ctx, patient_id, NSAID_RULE
+        ):
+            artifact_hash, release, who = self.released_rules[
+                (patient_id, NSAID_RULE)
+            ]
+
+            ctx.guard_content("dose_instruction", artifact_hash, release)
+
+            await self._say(
+                ctx,
+                patient_id,
+                RULE_NSAID[session.language].format(who=who),
+            )
+            rule_reply_sent = True
+
+        if drug:
+            await self.report_medication(
+                ctx,
+                patient_id=patient_id,
+                episode_id=episode_id,
+                text=text,
+                drug=drug,
+            )
+
+            if not rule_reply_sent:
+                await self._say(ctx, patient_id, lang["med_ack"])
+
+            medication_reported = True
+
+        # Continue processing symptoms even when medication was reported.
         for symptom in parsed["symptoms"]:
-            if not any(existing["code"] == symptom["code"] for existing in session.symptoms):
+            if not any(
+                existing["code"] == symptom["code"]
+                for existing in session.symptoms
+            ):
                 session.symptoms.append(symptom)
+
         if parsed["pain_score"] is not None:
             session.pain_score = parsed["pain_score"]
+
         if parsed["weight_loss_kg"] is not None:
             session.weight_loss_kg = parsed["weight_loss_kg"]
+
         session.minimizer = session.minimizer or parsed["minimizer"]
 
         if not session.symptoms and session.pain_score is None:
-            await self._say(ctx, patient_id, lang["hello"])
+            if not medication_reported and not rule_reply_sent:
+                await self._say(ctx, patient_id, lang["hello"])
             return
-        await self._evaluate(ctx, patient_id=patient_id, episode_id=episode_id, channel=channel)
+
+        await self._evaluate(
+            ctx,
+            patient_id=patient_id,
+            episode_id=episode_id,
+            channel=channel,
+        )
 
     async def _evaluate(
         self, ctx: SeatContext, *, patient_id: str, episode_id: str, channel: str
