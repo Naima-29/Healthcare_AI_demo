@@ -179,10 +179,25 @@ class EdgeCases:
     # ------------------------------------------------------------------ B. medications
     async def medications(self) -> None:
         area = "B. Medications"
-        await self.companion.report_medication(self.ctx("companion"), patient_id=PATIENT, episode_id="ep-b1",
-                                               text="Prendo Brufen 600 tre volte al giorno per il mal di schiena")
+        published_before = len(self.desk.bus.published)
+
+        await self.companion.report_medication(
+            self.ctx("companion"),
+            patient_id=PATIENT,
+            episode_id="ep-b1",
+            text="Prendo Brufen 600 tre volte al giorno per il mal di schiena"
+        )
         await self.desk.bus.drain()
-        asked = self.sent("renal_guardian", MessageType.DATA_REQUEST)
+
+        asked = [
+            e for s, e in self.desk.bus.published[published_before:]
+            if s == DISPATCHER_INBOX
+            and e.from_ == "renal_guardian"
+            and e.type == MessageType.DATA_REQUEST
+            and e.payload.get("what") == "recent creatinine / eGFR"
+        ]
+        for request in asked:
+            print("DEBUG DATA REQUEST:", request.payload)
         conflict = self.received("therapy_conflict")
         self.check(area, "B1 Italian brand 'Brufen', eGFR on record 165 days old",
                    "recognised as NSAID; asks the patient for a recent lab photo before concluding",
