@@ -10,7 +10,10 @@ same rules (knowledge/rules.json through km.check_conflicts / km.ckd_stage):
     -> otherwise evaluate on the record
   data_delivered{kind: lab} (the patient's lab photo, from the Companion) -> evaluate on the fresh value
   evaluate: conditions, medications, home blood pressure, CKD stage -> km.check_conflicts
-    -> therapy_conflict to the Safety Verifier (or nothing, when there is no conflict)
+    -> one therapy_conflict per conflict rule that applies, to the Safety Verifier (nothing when none applies)
+
+Several medications can wait for the same lab report: a second one reported before the lab arrives is added to
+the queue (no second data_request), and the lab report completes the check for all of them.
 
 Refusals: change_dose, prescribe, send_to_patient, alter_record. Gate: nephrologist_review (on the case pack).
 """
@@ -41,7 +44,7 @@ class RenalGuardian(Seat):
 
     def __init__(self, *, stale_days: int = STALE_DAYS):
         self.stale_days = stale_days
-        self.pending: dict[str, _Pending] = {}  # patient id -> medication waiting for kidney data
+        self.pending: dict[str, list[_Pending]] = {}  # patient id -> medications waiting for kidney data
 
     async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
         if isinstance(payload, MedicationReport):
@@ -53,9 +56,14 @@ class RenalGuardian(Seat):
 
     async def _on_medication(self, env: Envelope, med: MedicationReport, ctx: SeatContext) -> None:
         record = await ctx.tool("fhir.get_observations", patient_id=env.patient_id, code="eGFR")
-        self.pending[env.patient_id] = _Pending(med, record, env.episode_id)
+        # self.pending[env.patient_id] = _Pending(med, record, env.episode_id)
+        waiting = self.pending.setdefault(env.patient_id, [])
+        already_asked = bool(waiting)  # an earlier medication is already waiting for the patient's lab report
+        waiting.append(_Pending(med, record, env.episode_id))
         age = record.get("age_days")
         if age is None or age > self.stale_days:
+            if already_asked:
+                return
             latest = record.get("latest") or {}
             await ctx.send(MessageType.DATA_REQUEST, "companion", DataRequest(
                 what="recent creatinine / eGFR",
@@ -68,28 +76,30 @@ class RenalGuardian(Seat):
                                                     "date": latest["date"], "source": "FHIR record"})
 
     async def _evaluate(self, patient_id: str, ctx: SeatContext, lab: dict[str, Any]) -> None:
-        pend = self.pending.get(patient_id)
-        if pend is None:
+        waiting = self.pending.pop(patient_id, [])
+        if not waiting:
             return  # a lab report with no medication waiting: nothing to check
         conditions = await ctx.tool("fhir.get_conditions", patient_id=patient_id)
         medications = await ctx.tool("fhir.get_medications", patient_id=patient_id)
         wear = await ctx.tool("wearables.read", patient_id=patient_id, days=30)
         stage = await ctx.tool("km.ckd_stage", egfr=lab["egfr"])
         sbp = (wear.get("summary_7d") or {}).get("sbp")
-        conflicts = await ctx.tool("km.check_conflicts", drug_class=pend.drug.drug_class, egfr=lab["egfr"], sbp=sbp,
-                                   conditions=[c["display"] for c in conditions if c.get("display")],
-                                   medications=[m["name"] for m in medications if m.get("name")])
-        del self.pending[patient_id]
-        if not conflicts:
-            return
-        c = conflicts[0]
-        series = [{"date": x["date"], "value": x["value"]} for x in pend.egfr_record.get("series", [])]
-        if lab.get("date") and not any(x["date"] == lab["date"] for x in series):
-            series.insert(0, {"date": lab["date"], "value": lab["egfr"]})
-        await ctx.send(MessageType.THERAPY_CONFLICT, PEER, TherapyConflict(
-            drug=c["drug"], conditions=c["conditions"], severity=c["severity"], rationale=c["rationale"],
-            citations=c["citations"], rule_id=c.get("rule_id"), egfr_series=series,
-            data_freshness={"egfr": lab["egfr"], "creatinine": lab.get("creatinine"), "date": lab.get("date"),
-                            "source": lab.get("source"), "stage": stage["stage"] if stage else None,
-                            "home_sbp_7d": sbp}),
-            patient_id=patient_id, episode_id=pend.episode_id)
+        sent: set[str | None] = set()  # rule ids already flagged: two NSAIDs give one NSAID conflict
+        for pend in waiting:
+            conflicts = await ctx.tool("km.check_conflicts", drug_class=pend.drug.drug_class, egfr=lab["egfr"],
+                                       sbp=sbp, conditions=[c["display"] for c in conditions if c.get("display")],
+                                       medications=[m["name"] for m in medications if m.get("name")])
+            series = [{"date": x["date"], "value": x["value"]} for x in pend.egfr_record.get("series", [])]
+            if lab.get("date") and not any(x["date"] == lab["date"] for x in series):
+                series.insert(0, {"date": lab["date"], "value": lab["egfr"]})
+            for c in conflicts:
+                if c.get("rule_id") in sent:
+                    continue
+                sent.add(c.get("rule_id"))
+                await ctx.send(MessageType.THERAPY_CONFLICT, PEER, TherapyConflict(
+                    drug=c["drug"], conditions=c["conditions"], severity=c["severity"], rationale=c["rationale"],
+                    citations=c["citations"], rule_id=c.get("rule_id"), egfr_series=series,
+                    data_freshness={"egfr": lab["egfr"], "creatinine": lab.get("creatinine"),
+                                    "date": lab.get("date"), "source": lab.get("source"),
+                                    "stage": stage["stage"] if stage else None, "home_sbp_7d": sbp}),
+                    patient_id=patient_id, episode_id=pend.episode_id)
