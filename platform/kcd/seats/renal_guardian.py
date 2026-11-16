@@ -56,7 +56,6 @@ class RenalGuardian(Seat):
 
     async def _on_medication(self, env: Envelope, med: MedicationReport, ctx: SeatContext) -> None:
         record = await ctx.tool("fhir.get_observations", patient_id=env.patient_id, code="eGFR")
-        # self.pending[env.patient_id] = _Pending(med, record, env.episode_id)
         waiting = self.pending.setdefault(env.patient_id, [])
         already_asked = bool(waiting)  # an earlier medication is already waiting for the patient's lab report
         waiting.append(_Pending(med, record, env.episode_id))
@@ -103,3 +102,4 @@ class RenalGuardian(Seat):
                                     "date": lab.get("date"), "source": lab.get("source"),
                                     "stage": stage["stage"] if stage else None, "home_sbp_7d": sbp}),
                     patient_id=patient_id, episode_id=pend.episode_id)
+                
