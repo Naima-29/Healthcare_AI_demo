@@ -35,6 +35,17 @@ def _check(name: str, ok: bool) -> dict[str, Any]:
     return {"check": name, "ok": bool(ok)}
 
 
+def _parse_date(value: Any) -> datetime | None:
+    """The lab date as a UTC datetime, or None when it is missing or unreadable (e.g. "08/10/2026")."""
+    if not value:
+        return None
+    try:
+        taken = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return taken if taken.tzinfo else taken.replace(tzinfo=UTC)
+
+
 class SafetyVerifier(Seat):
     seat_id = "safety_verifier"
 
@@ -81,14 +92,15 @@ class SafetyVerifier(Seat):
     def check_conflict(self, p: TherapyConflict) -> list[dict[str, Any]]:
         f = p.data_freshness or {}
         egfr = f.get("egfr")
-        age = float("inf")
-        if f.get("date"):
-            taken = datetime.fromisoformat(str(f["date"]))
-            taken = taken if taken.tzinfo else taken.replace(tzinfo=UTC)
-            age = (self.now() - taken).total_seconds() / 86400
+        taken = _parse_date(f.get("date"))
+        age = (self.now() - taken).total_seconds() / 86400 if taken else None
         return [
             _check("eGFR plausible (1-150)", isinstance(egfr, int | float) and 1 < egfr < 150),
-            _check(f"kidney function data fresh (<= {self.stale_days} days)", age <= self.stale_days),
+            _check("kidney function date readable", taken is not None),
+            # one day of slack for time zones; a later date is a misread (e.g. OCR got the year wrong)
+            _check("kidney function date not in the future", age is not None and age >= -1),
+            _check(f"kidney function data fresh (<= {self.stale_days} days)",
+                   age is not None and age <= self.stale_days),
         ]
 
     @staticmethod

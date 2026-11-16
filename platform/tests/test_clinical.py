@@ -202,6 +202,8 @@ class SafetyVerifierTest(unittest.IsolatedAsyncioTestCase):
             "no sources": {"citations": ["[x] placeholder"]},
             "implausible eGFR": {"data_freshness": {**CONFLICT["data_freshness"], "egfr": 400}},
             "old kidney data": {"data_freshness": {**CONFLICT["data_freshness"], "date": "2026-01-01"}},
+            "unreadable date": {"data_freshness": {**CONFLICT["data_freshness"], "date": "08/10/2026"}},
+            "date in the future": {"data_freshness": {**CONFLICT["data_freshness"], "date": "2027-03-01"}},
             "made-up citation": {"citations": ["[99] Invented Guideline 2030"]},
             "partial citation": {"citations": [CONFLICT["citations"][0][:30]]},
             "one fake among real": {"citations": [CONFLICT["citations"][0], "[99] Invented Guideline 2030"]},
@@ -219,6 +221,7 @@ class SafetyVerifierTest(unittest.IsolatedAsyncioTestCase):
         overrides = [e for e in self.desk.audit.find("pep.action", "blocked")
                      if e.detail["target"] == "verifier.override"]
         self.assertEqual(len(overrides), len(cases))  # each failed check tried to override, and was refused
+        self.assertEqual(self.desk.bus.dead_letters, [])  # a bad date is rejected, never crashes the verifier
 
     async def test_imaging_checks(self):
         await self.verify(MessageType.IMAGING_SIGNAL, IMAGING, "imaging_reader")
