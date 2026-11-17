@@ -151,6 +151,12 @@ and call shapes match the catalogue and the seats (`patient=`, `code="eGFR"`). `
 session into a seat's `ToolRegistry`; the PEP still decides every call before it reaches a connector.
 Run one: `KCD_FHIR_URL=http://localhost:8080/fhir python -m kcd_core.connectors.fhir`.
 
+### Cloud egress gate (`kcd_core/egress.py`, contract C6)
+
+The only code path to a cloud model. Sends only with a valid, unexpired, single-use `EgressApproval` signed by the
+Safety Verifier over the exact payload hash, for the right seat and target, with the seat's manifest unchanged.
+Everything else blocks and is audited. Full contract and open questions: `docs/EGRESS_CONTRACT.md`.
+
 ## Known gaps (deliberately not done here)
 
 - Ed25519 seat keys are read from files; wiring them to Vault/KMS is a deployment task.

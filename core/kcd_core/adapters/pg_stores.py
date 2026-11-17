@@ -51,6 +51,31 @@ class PostgresIdempotencyStore:
 
 
 # ---------------------------------------------------------------------------
+# Egress approvals (single use)
+# ---------------------------------------------------------------------------
+
+
+class PostgresApprovalUses:
+    """Implements ``ApprovalUseStore``. The primary key decides the race between replicas."""
+
+    def __init__(self, pool: ConnectionPool) -> None:
+        self._pool = pool
+
+    def consume(self, approval_id: str, expires_at: datetime) -> bool:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "INSERT INTO egress_approval_use (approval_id, expires_at) VALUES (%s, %s) "
+                "ON CONFLICT DO NOTHING RETURNING 1", (approval_id, expires_at),
+            ).fetchone()
+        return row is not None
+
+    def prune(self, older_than: timedelta) -> int:
+        """Rows only matter until the approval expires; keep them a while longer for forensics."""
+        with self._pool.connection() as conn:
+            return conn.execute("DELETE FROM egress_approval_use WHERE expires_at < now() - %s", (older_than,)).rowcount
+
+
+# ---------------------------------------------------------------------------
 # Audit (hash chain)
 # ---------------------------------------------------------------------------
 
