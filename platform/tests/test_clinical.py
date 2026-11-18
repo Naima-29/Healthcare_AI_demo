@@ -52,12 +52,26 @@ class RenalGuardianTest(unittest.IsolatedAsyncioTestCase):
         await self.desk.close()
         self.tmp.cleanup()
 
-    async def start(self, record: dict, sbp: float | None = 148):
+    async def start(
+        self,
+        record: dict,
+        sbp: float | None = 148,
+        consented: bool = True,
+    ):
         (self.root / "pt_marco").mkdir(exist_ok=True)
         (self.root / "pt_marco" / "fhir-bundle.json").write_text(json.dumps(record))
         wear = {"pt_marco": {"sbp": sbp}} if sbp is not None else {}
-        self.rt = await self.desk.add_seat(RenalGuardian(),
-                                           clinical_tools(FolderFhir(self.root), KM, self.desk.clock.now, wear))
+
+        self.rt = await self.desk.add_seat(
+            RenalGuardian(),
+            clinical_tools(
+                FolderFhir(self.root),
+                KM,
+                self.desk.clock.now,
+                wear,
+                wearables_consent=lambda patient_id: consented,
+            ),
+        )
 
     async def send(self, type_, payload):
         await self.desk.deliver(self.desk.envelope(type_, "companion", "renal_guardian", payload))
@@ -121,8 +135,16 @@ class RenalGuardianTest(unittest.IsolatedAsyncioTestCase):
         data["conflict_rules"].append(second)
         (self.root / "pt_marco").mkdir(exist_ok=True)
         (self.root / "pt_marco" / "fhir-bundle.json").write_text(json.dumps(bundle(egfr_date="2026-10-01", egfr=56)))
-        await self.desk.add_seat(RenalGuardian(), clinical_tools(FolderFhir(self.root), KnowledgeModel(data),
-                                                                self.desk.clock.now, {"pt_marco": {"sbp": 148}}))
+        await self.desk.add_seat(
+            RenalGuardian(),
+            clinical_tools(
+                FolderFhir(self.root),
+                KnowledgeModel(data),
+                self.desk.clock.now,
+                {"pt_marco": {"sbp": 148}},
+                wearables_consent=lambda patient_id: True,
+            ),
+        )
         await self.send(MessageType.MEDICATION_REPORT, MED)
         self.assertEqual([e.payload["rule_id"] for e in self.out()], ["nsaid_renal_and_blood_pressure",
                                                                     "nsaid_second_rule"])
@@ -159,6 +181,32 @@ class RenalGuardianTest(unittest.IsolatedAsyncioTestCase):
                 ctx.pep.check_tool(tool)
         self.assertEqual(set(ctx.manifest.a2a_peers), {"companion", "safety_verifier"})
         self.assertEqual(ctx.manifest.gates, ["nephrologist_review"])
+
+    async def test_wearables_denied_requests_consent_only_once(self):
+        await self.start(bundle(egfr_date="2026-10-01", egfr=56), consented=False)
+
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+
+        requests = [
+            e for e in self.out()
+            if e.type == MessageType.DATA_REQUEST
+            and e.payload.get("what") == "wearable_data_consent"
+        ]
+
+        self.assertEqual(len(requests), 1)
+        self.assertTrue(requests[0].payload["ask_patient"])
+
+        # A second evaluation must not send another consent request.
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+
+        requests = [
+            e for e in self.out()
+            if e.type == MessageType.DATA_REQUEST
+            and e.payload.get("what") == "wearable_data_consent"
+        ]
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(self.desk.bus.dead_letters, [])
 
 
 CONFLICT = json.loads((Path(__file__).resolve().parents[2] / "contracts" / "fixtures" / "therapy_conflict.json")

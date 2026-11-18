@@ -44,7 +44,8 @@ class RenalGuardian(Seat):
 
     def __init__(self, *, stale_days: int = STALE_DAYS):
         self.stale_days = stale_days
-        self.pending: dict[str, list[_Pending]] = {}  # patient id -> medications waiting for kidney data
+        self.pending: dict[str, list[_Pending]] = {}
+        self.wearables_consent_requested: set[str] = set()
 
     async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
         if isinstance(payload, MedicationReport):
@@ -80,7 +81,26 @@ class RenalGuardian(Seat):
             return  # a lab report with no medication waiting: nothing to check
         conditions = await ctx.tool("fhir.get_conditions", patient_id=patient_id)
         medications = await ctx.tool("fhir.get_medications", patient_id=patient_id)
-        wear = await ctx.tool("wearables.read", patient_id=patient_id, days=30)
+        try:
+            wear = await ctx.tool("wearables.read", patient_id=patient_id, days=30)
+            self.wearables_consent_requested.discard(patient_id)
+        except PermissionError:
+            wear = {}
+
+            if patient_id not in self.wearables_consent_requested:
+                self.wearables_consent_requested.add(patient_id)
+
+                await ctx.send(
+                    MessageType.DATA_REQUEST,
+                    "companion",
+                    DataRequest(
+                        what="wearable_data_consent",
+                        why="Wearable data could help assess the patient's home blood pressure.",
+                        ask_patient="Please ask the patient for permission to access wearable data.",
+                    ),
+                    patient_id=patient_id,
+                    episode_id=waiting[0].episode_id,
+                )
         stage = await ctx.tool("km.ckd_stage", egfr=lab["egfr"])
         sbp = (wear.get("summary_7d") or {}).get("sbp")
         sent: set[str | None] = set()  # rule ids already flagged: two NSAIDs give one NSAID conflict
@@ -102,4 +122,3 @@ class RenalGuardian(Seat):
                                     "date": lab.get("date"), "source": lab.get("source"),
                                     "stage": stage["stage"] if stage else None, "home_sbp_7d": sbp}),
                     patient_id=patient_id, episode_id=pend.episode_id)
-                
