@@ -196,7 +196,7 @@ class CompanionTest(unittest.IsolatedAsyncioTestCase):
                                         text="What does my DNA say?")
         self.assertIn("specialist", self.channel.outbox[-1]["text"])
 
-    
+
     async def test_imaging_question_is_referred_to_doctor(self):
         companion, runtime = await self.start_companion()
 
@@ -318,7 +318,7 @@ class CompanionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(env.type == MessageType.DATA_DELIVERED
                             for env in self.desk.delivered_to("renal_guardian")))
 
-    
+
     async def test_patient_lab_report_ocr_is_forwarded(self):
         companion, runtime = await self.start_companion()
 

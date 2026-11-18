@@ -116,7 +116,7 @@ class PatientChannel:
         message["transport"] = "telegram"
         return {"delivered": True, "transport": "telegram"}
 
-    
+
 
     async def download_file(
         self,

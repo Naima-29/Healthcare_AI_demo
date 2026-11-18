@@ -190,7 +190,7 @@ class WebCompanion(Companion):
         await self.attach_lab_report(ctx, patient_id=patient, episode_id=self.episode(patient),
                                      ocr_text=json.dumps(photo))
 
-    
+
     async def on_lab_photo_ocr(
         self,
         ctx: SeatContext,

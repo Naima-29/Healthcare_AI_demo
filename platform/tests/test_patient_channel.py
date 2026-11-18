@@ -93,7 +93,7 @@ class PatientChannelTest(unittest.TestCase):
         self.assertEqual(channel.token, "test-token")
         self.assertEqual(channel.chat_by_patient, mapping)
 
-    
+
     def test_registered_chat_message_reaches_correct_patient(self):
         async def run_test():
             channel = PatientChannel(
