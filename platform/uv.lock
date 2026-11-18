@@ -589,7 +589,6 @@ dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pillow" },
-    { name = "pytesseract" },
     { name = "sqlalchemy" },
 ]
 
@@ -608,6 +607,7 @@ dicom = [
 media = [
     { name = "av" },
     { name = "faster-whisper" },
+    { name = "pytesseract" },
 ]
 postgres = [
     { name = "psycopg", extra = ["binary"] },
@@ -635,7 +635,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
     { name = "pydicom", marker = "extra == 'dicom'", specifier = ">=2.4" },
-    { name = "pytesseract", specifier = ">=0.3.13" },
+    { name = "pytesseract", marker = "extra == 'media'", specifier = ">=0.3.13" },
     { name = "scipy", marker = "extra == 'ct-model'", specifier = ">=1.11" },
     { name = "segmentation-models-pytorch", marker = "extra == 'ct-model'", specifier = ">=0.3" },
     { name = "sqlalchemy", specifier = ">=2.0" },

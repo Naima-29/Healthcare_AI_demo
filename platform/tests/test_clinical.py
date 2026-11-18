@@ -128,6 +128,43 @@ class RenalGuardianTest(unittest.IsolatedAsyncioTestCase):
         await self.send(MessageType.DATA_DELIVERED, LAB)
         self.assertEqual(self.out(), [])
 
+    async def test_every_conflict_rule_that_applies_is_sent(self):
+        data = copy.deepcopy(KM.data)
+        second = copy.deepcopy(data["conflict_rules"][0])
+        second["id"] = "nsaid_second_rule"
+        data["conflict_rules"].append(second)
+        (self.root / "pt_marco").mkdir(exist_ok=True)
+        (self.root / "pt_marco" / "fhir-bundle.json").write_text(json.dumps(bundle(egfr_date="2026-10-01", egfr=56)))
+        await self.desk.add_seat(
+            RenalGuardian(),
+            clinical_tools(
+                FolderFhir(self.root),
+                KnowledgeModel(data),
+                self.desk.clock.now,
+                {"pt_marco": {"sbp": 148}},
+                wearables_consent=lambda patient_id: True,
+            ),
+        )
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+        self.assertEqual([e.payload["rule_id"] for e in self.out()], ["nsaid_renal_and_blood_pressure",
+                                                                    "nsaid_second_rule"])
+
+    async def test_second_medication_while_waiting_does_not_replace_the_first(self):
+        await self.start(bundle(egfr_date="2026-06-12"))              # stale: both wait for the lab report
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+        await self.send(MessageType.MEDICATION_REPORT, {"drug": "paracetamol", "class": "non_NSAID_analgesic"})
+        self.assertEqual([e.type for e in self.out()], [MessageType.DATA_REQUEST])   # asked once, not twice
+        await self.send(MessageType.DATA_DELIVERED, LAB)
+        self.assertEqual([e.type for e in self.out()], [MessageType.DATA_REQUEST, MessageType.THERAPY_CONFLICT])
+        self.assertEqual(self.out()[-1].payload["data_freshness"]["egfr"], 52)
+
+    async def test_two_nsaids_give_one_conflict(self):
+        await self.start(bundle(egfr_date="2026-06-12"))
+        await self.send(MessageType.MEDICATION_REPORT, MED)
+        await self.send(MessageType.MEDICATION_REPORT, {"drug": "diclofenac", "class": "NSAID"})
+        await self.send(MessageType.DATA_DELIVERED, LAB)
+        self.assertEqual([e.type for e in self.out()], [MessageType.DATA_REQUEST, MessageType.THERAPY_CONFLICT])
+
     async def test_policy(self):
         await self.start(bundle())
         ctx = self.rt.context()
@@ -213,6 +250,8 @@ class SafetyVerifierTest(unittest.IsolatedAsyncioTestCase):
             "no sources": {"citations": ["[x] placeholder"]},
             "implausible eGFR": {"data_freshness": {**CONFLICT["data_freshness"], "egfr": 400}},
             "old kidney data": {"data_freshness": {**CONFLICT["data_freshness"], "date": "2026-01-01"}},
+            "unreadable date": {"data_freshness": {**CONFLICT["data_freshness"], "date": "08/10/2026"}},
+            "date in the future": {"data_freshness": {**CONFLICT["data_freshness"], "date": "2027-03-01"}},
             "made-up citation": {"citations": ["[99] Invented Guideline 2030"]},
             "partial citation": {"citations": [CONFLICT["citations"][0][:30]]},
             "one fake among real": {"citations": [CONFLICT["citations"][0], "[99] Invented Guideline 2030"]},
@@ -230,6 +269,7 @@ class SafetyVerifierTest(unittest.IsolatedAsyncioTestCase):
         overrides = [e for e in self.desk.audit.find("pep.action", "blocked")
                      if e.detail["target"] == "verifier.override"]
         self.assertEqual(len(overrides), len(cases))  # each failed check tried to override, and was refused
+        self.assertEqual(self.desk.bus.dead_letters, [])  # a bad date is rejected, never crashes the verifier
 
     async def test_imaging_checks(self):
         await self.verify(MessageType.IMAGING_SIGNAL, IMAGING, "imaging_reader")

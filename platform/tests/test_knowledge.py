@@ -37,8 +37,7 @@ class KnowledgeModelTest(unittest.TestCase):
         self.assertEqual(KM.classify_drug("ibuprofene 600")["class"], "NSAID")
         self.assertEqual(KM.classify_drug("tachipirina")["class"], "non_NSAID_analgesic")
         self.assertIsNone(KM.classify_drug("nothing here"))
-        # Known gap, same in the Node version: the plural is not in the names list (raised with Person 4).
-        self.assertIsNone(KM.classify_drug("NSAIDs"))
+        self.assertEqual(KM.classify_drug("I take NSAIDs sometimes"), {"drug": "nsaids", "class": "NSAID"})
 
     def test_red_flags(self):
         high = KM.red_flags(symptoms=["visible_hematuria", "flank_pain"], pain_score=8, history_rcc=True)
