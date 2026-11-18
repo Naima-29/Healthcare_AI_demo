@@ -5,14 +5,14 @@ import unittest
 from kcd_core.contracts import MessageType
 from kcd_core.contracts.messages import ClinicianDecision, DataRequest
 
+from kcd.cortex import Cortex, HumanActor
+from kcd.cortex.auth import release_verifier
 from kcd.desk import Desk
 from kcd.knowledge import KnowledgeModel
 from kcd.patient.channel import PatientChannel
 from kcd.patient.fuzzy import from_features
 from kcd.patient.nlu import extract
 from kcd.seats.companion import Companion, companion_tools, parse_lab_report
-from kcd.cortex import Cortex, HumanActor
-from kcd.cortex.auth import release_verifier
 
 
 class CompanionTest(unittest.IsolatedAsyncioTestCase):

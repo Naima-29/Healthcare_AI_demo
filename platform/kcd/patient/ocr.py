@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from io import BytesIO
+from pathlib import Path
+
 import pytesseract
 from PIL import Image, ImageOps
-
 
 # Windows Tesseract installation path.
 # This can be overridden with the TESSERACT_CMD environment variable.

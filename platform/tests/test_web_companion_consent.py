@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
-from kcd.tools import clinical_tools
+
 from kcd.desk import Desk
 from kcd.knowledge import KnowledgeModel
+from kcd.tools import clinical_tools
 from kcd.web.seats import WebChannel, WebCompanion
 
 

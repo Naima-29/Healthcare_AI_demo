@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from kcd_core.contracts import Envelope, MessageType
-from kcd_core.pep import PolicyViolation
 from kcd_core.contracts.messages import (
     ClinicianDecision,
     DataDelivered,
@@ -25,8 +24,10 @@ from kcd_core.contracts.messages import (
     Symptom,
     SymptomReport,
 )
+from kcd_core.pep import PolicyViolation
 from kcd_core.runtime import Seat, SeatContext
 from pydantic import BaseModel
+
 from kcd.cortex import CoreMemory
 from kcd.knowledge import KnowledgeModel
 from kcd.patient.fuzzy import from_features

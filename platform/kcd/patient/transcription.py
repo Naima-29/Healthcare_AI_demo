@@ -10,7 +10,6 @@ from pathlib import Path
 
 from faster_whisper import WhisperModel
 
-
 _model: WhisperModel | None = None
 _model_lock = threading.Lock()
 

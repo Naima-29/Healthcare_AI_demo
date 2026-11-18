@@ -5,9 +5,9 @@ import asyncio
 import json
 import unittest
 from unittest.mock import patch
+from urllib.parse import parse_qs
 
 from kcd.patient.channel import PatientChannel
-from urllib.parse import parse_qs
 
 
 class PatientChannelTest(unittest.TestCase):

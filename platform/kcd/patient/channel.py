@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Awaitable, Callable
 from typing import Any
+
 try:
     from dotenv import find_dotenv, load_dotenv
     load_dotenv(find_dotenv())

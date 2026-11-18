@@ -41,6 +41,7 @@ from kcd.imaging.image_io import ImageDecodeError, LoadedImage, load_image
 from kcd.imaging.model import CallableCtModel, CtModelError, CtPrediction, FixedCtModel
 from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
+from kcd.patient.channel import PatientChannel
 from kcd.scenarios.edge_cases import FIXTURES as ALL_FIXTURES
 from kcd.scenarios.edge_cases import SCRIPTED_VERSION, ScriptedCtModel
 from kcd.seats.archivist import Archivist
@@ -54,7 +55,6 @@ from kcd.util import sha256_hex
 from kcd.web.board import Metrics, ObservedAudit, ObservedBus, RunningClock, for_browser
 from kcd.web.hub import Hub
 from kcd.web.seats import NSAID_RULE, WebCaseBriefer, WebChannel, WebCompanion, WebVerifier
-from kcd.patient.channel import PatientChannel
 
 MARCO, SOFIA = "marco-r", "sofia-b"
 PATIENTS = (MARCO, SOFIA)

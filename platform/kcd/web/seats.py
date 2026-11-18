@@ -12,13 +12,11 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from kcd_core.contracts import Envelope, Release
+from kcd_core.contracts import Envelope
 from kcd_core.contracts.messages import ClinicianDecision, DataRequest
-from kcd_core.pep import PolicyViolation
 from kcd_core.runtime import SeatContext
 from pydantic import BaseModel
 
-from kcd.patient.nlu import extract
 from kcd.seats.case_briefer import CaseBriefer
 from kcd.seats.companion import Companion
 from kcd.seats.safety_verifier import SafetyVerifier
