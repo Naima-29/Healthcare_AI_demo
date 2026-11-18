@@ -39,3 +39,7 @@ extend = "../pyproject.toml"    # same lint rules as Core
 [tool.pytest.ini_options]
 pythonpath = [".", "../core"]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["kcd*", "evals*"]
