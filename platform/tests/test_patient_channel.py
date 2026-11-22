@@ -112,7 +112,7 @@ class PatientChannelTest(unittest.TestCase):
                     {
                         "update_id": 1,
                         "message": {
-                            "chat": {"id": 12345},
+                            "chat": {"id": 12345, "type": "private"},
                             "text": "I have pain in my side.",
                         },
                     }
@@ -162,7 +162,7 @@ class PatientChannelTest(unittest.TestCase):
                     {
                         "update_id": 101,
                         "message": {
-                            "chat": {"id": 12345},
+                            "chat": {"id": 12345, "type": "private"},
                             "photo": [
                                 {"file_id": "small-photo-id"},
                                 {"file_id": "large-photo-id"},
@@ -172,7 +172,7 @@ class PatientChannelTest(unittest.TestCase):
                     {
                         "update_id": 102,
                         "message": {
-                            "chat": {"id": 12345},
+                            "chat": {"id": 12345, "type": "private"},
                             "voice": {"file_id": "voice-file-id"},
                         },
                     },
@@ -267,6 +267,54 @@ class PatientChannelTest(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_registered_group_chat_is_ignored(self):
+        async def run_test():
+            channel = PatientChannel(
+                token="test-token",
+                chat_by_patient={"marco-r": "-10012345"},
+            )
+            stop = asyncio.Event()
+            received = []
+
+            update = {
+                "ok": True,
+                "result": [
+                    {
+                        "update_id": 1,
+                        "message": {
+                            "chat": {
+                                "id": -10012345,
+                                "type": "supergroup",
+                            },
+                            "text": "I have pain in my side.",
+                        },
+                    }
+                ],
+            }
+
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return False
+
+                def read(self):
+                    return json.dumps(update).encode("utf-8")
+
+            def fake_urlopen(*args, **kwargs):
+                stop.set()
+                return FakeResponse()
+
+            async def on_inbound(patient_id, text, metadata):
+                received.append((patient_id, text, metadata))
+
+            with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                await channel.poll_updates(on_inbound, stop)
+
+            self.assertEqual(received, [])
+
+        asyncio.run(run_test())
 
     def test_unknown_chat_is_ignored(self):
         async def run_test():
@@ -283,7 +331,7 @@ class PatientChannelTest(unittest.TestCase):
                     {
                         "update_id": 1,
                         "message": {
-                            "chat": {"id": 99999},
+                            "chat": {"id": 99999, "type": "private"},
                             "text": "Hello",
                         },
                     }

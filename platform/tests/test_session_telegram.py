@@ -137,7 +137,7 @@ def test_telegram_voice_transcription_error_is_handled():
         session.telegram.download_voice.assert_awaited_once_with("voice-123")
         session.patient_message.assert_not_awaited()
         assert events[0][0] == "note"
-        assert "Could not transcribe" in events[0][1]["text"]
+        assert events[0][1]["text"] == "Could not process the Telegram voice message. Please try again."
 
     asyncio.run(run_test())
 

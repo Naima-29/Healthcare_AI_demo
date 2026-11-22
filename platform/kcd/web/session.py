@@ -353,36 +353,22 @@ class Session:
             try:
                 from kcd.patient.ocr import extract_text_from_bytes
 
-                print("[Photo handler] Downloading photo...", flush=True)
                 image_bytes = await self.telegram.download_photo(file_id)
-                print("[Photo handler] Photo downloaded:", len(image_bytes), "bytes", flush=True)
-
-                print("[OCR] Starting text extraction...", flush=True)
                 ocr_text = extract_text_from_bytes(image_bytes)
-                print("[OCR] Extracted text:", repr(ocr_text), flush=True)
-
-                print("[Photo handler] Sending OCR text to Companion...", flush=True)
-
                 await self.companion.attach_lab_report(
                     self._ctx("companion"),
                     patient_id=patient_id,
                     episode_id=self.companion.episode(patient_id),
                     ocr_text=ocr_text,
                 )
-
-                print("[Photo handler] Companion processing finished.", flush=True)
-
                 await self.drain()
 
-                print("[Photo handler] Drain finished.", flush=True)
-                print("[Photo handler] Processing completed.", flush=True)
-
-            except Exception as exc:
+            except Exception:
                 self.hub.publish(
                     "note",
                     {
                         "seat": "companion",
-                        "text": f"Could not process Telegram lab photo: {exc}",
+                        "text": "Could not process the Telegram lab photo. Please try again.",
                     },
                 )
             return
@@ -390,7 +376,6 @@ class Session:
 
         if kind == "voice":
             file_id = metadata.get("file_id")
-            print("[Voice handler] Received voice file ID:", bool(file_id))
 
             if not file_id:
                 self.hub.publish(
@@ -406,21 +391,19 @@ class Session:
                 from kcd.patient.transcription import transcribe_audio
 
                 audio_bytes = await self.telegram.download_voice(file_id)
-                print("[Voice handler] Audio downloaded:", len(audio_bytes), "bytes")
                 transcript = await asyncio.to_thread(
                     transcribe_audio,
                     audio_bytes,
                 )
-                print("[Voice handler] Transcript:", transcript)
 
                 await self.patient_message(transcript, None, patient_id)
 
-            except Exception as exc:
+            except Exception:
                 self.hub.publish(
                     "note",
                     {
                         "seat": "companion",
-                        "text": f"Could not transcribe Telegram voice message: {exc}",
+                        "text": "Could not process the Telegram voice message. Please try again.",
                     },
                 )
             return

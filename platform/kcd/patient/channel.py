@@ -137,10 +137,7 @@ class PatientChannel:
         def get_file_info() -> dict[str, Any]:
             with urllib.request.urlopen(url, timeout=15) as response:
                 return json.loads(response.read().decode("utf-8"))
-
-        print("[Telegram download] Requesting file information...", flush=True)
         result = await asyncio.to_thread(get_file_info)
-        print("[Telegram download] File information received.", flush=True)
 
         if not result.get("ok"):
             raise RuntimeError("Telegram rejected getFile")
@@ -171,11 +168,8 @@ class PatientChannel:
 
             return data
 
-        print("[Telegram download] Starting file download...", flush=True)
         data = await asyncio.to_thread(download)
-        print("[Telegram download] File downloaded:", len(data), "bytes", flush=True)
         return data
-
 
     async def download_photo(
         self,
@@ -224,19 +218,13 @@ class PatientChannel:
                 for update in result.get("result", []):
                     self.offset = int(update["update_id"]) + 1
                     message = update.get("message") or {}
-                    print(
-                        "[Telegram update received]",
-                        "message_type:",
-                        next(
-                            (key for key in ("text", "voice", "audio", "photo", "video")
-                            if message.get(key)),
-                            "unknown",
-                        ),
-                    )
                     chat = message.get("chat") or {}
                     chat_id = chat.get("id")
 
                     if chat_id is None:
+                        continue
+                    # Patient conversations must use private Telegram chats only.
+                    if chat.get("type") != "private":
                         continue
 
                     # Never assign an unknown Telegram chat to a patient.
@@ -291,6 +279,5 @@ class PatientChannel:
 
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
-                print(f"[Telegram polling error] {type(exc).__name__}: {exc}")
+            except Exception:
                 await asyncio.sleep(2)

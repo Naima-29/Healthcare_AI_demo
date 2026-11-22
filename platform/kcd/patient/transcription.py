@@ -46,29 +46,21 @@ def transcribe_audio(audio_bytes: bytes) -> str:
             temp_file.write(audio_bytes)
             temp_path = Path(temp_file.name)
 
-        print("[Whisper] Loading model...")
         model = _get_model()
-        print("[Whisper] Model loaded successfully.")
-
-        print("[Whisper] Starting audio transcription...")
         segments, _info = model.transcribe(
             str(temp_path),
             beam_size=1,
             vad_filter=False,
             language="en",
         )
-        print("[Whisper] Transcription started; reading segments...")
 
         transcript_parts = []
-
         for segment in segments:
-            print("[Whisper] Segment received:", segment.text, flush=True)
             cleaned = segment.text.strip()
             if cleaned:
                 transcript_parts.append(cleaned)
 
         transcript = " ".join(transcript_parts).strip()
-        print("[Whisper] All segments processed.", flush=True)
 
         if not transcript:
             raise ValueError("No speech could be recognized in the voice message")
