@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from kcd_core.contracts import Envelope, MessageType
+from kcd_core.contracts.release import Release
 from kcd_core.contracts.messages import (
     ClinicianDecision,
     DataDelivered,
@@ -32,6 +33,7 @@ from kcd.cortex import CoreMemory
 from kcd.knowledge import KnowledgeModel
 from kcd.patient.fuzzy import from_features
 from kcd.patient.nlu import extract
+from kcd.seats.safety_verifier import guard_patient_text
 
 NSAID_RULE = "avoid_drug_class:NSAID"
 
@@ -260,7 +262,9 @@ class Companion(Seat):
             for rule in mem.active_patient_rules()
         )
 
-    async def _say(self, ctx: SeatContext, patient_id: str, text: str) -> None:
+    async def _say(self, ctx: SeatContext, patient_id: str, text: str, *, artifact_hash: str | None = None, release: Release | None = None) -> None:
+        drug_names = [name for drug_class in self.km.data["drug_classes"] for name in drug_class["names"]]
+        guard_patient_text(ctx, text, artifact_hash=artifact_hash, release=release, drug_names=drug_names)
         await ctx.tool("channel.send", patient_id=patient_id, text=text)
 
     async def handle(self, env: Envelope, payload: BaseModel, ctx: SeatContext) -> None:
@@ -372,12 +376,12 @@ class Companion(Seat):
                 (patient_id, NSAID_RULE)
             ]
 
-            ctx.guard_content("dose_instruction", artifact_hash, release)
-
             await self._say(
                 ctx,
                 patient_id,
                 RULE_NSAID[session.language].format(who=who),
+                artifact_hash=artifact_hash,
+                release=release,
             )
             rule_reply_sent = True
 
@@ -576,9 +580,7 @@ class Companion(Seat):
     async def _deliver_signed_decision(
         self, ctx: SeatContext, patient_id: str, decision: ClinicianDecision
     ) -> None:
-        # Core's current ClinicianDecision carries the verified release id/signature but not
-        # the full Release object. The Case Briefer is the trust boundary that verifies the
-        # clinician's signature against the exact case-pack hash before publishing this message.
+        # Forward the verified clinician release so the patient-facing safety gate can check it.
         if not decision.signature or not decision.signed_by or not decision.decision_id or not decision.artifact_hash:
             raise ValueError("clinician decision is missing its signed-release provenance")
         session = self.session(patient_id)
@@ -589,7 +591,7 @@ class Companion(Seat):
             lines.append(decision.note)
         lines.append(lang["decision_tail"])
         text = "\n".join(lines)
-        await self._say(ctx, patient_id, text)
+        await self._say(ctx, patient_id, text, artifact_hash=decision.artifact_hash, release=decision.release)
         self.told_patient.extend(
             [{"code": item.code, "text": item.patient_text, "decision_id": decision.decision_id}
              for item in decision.items]

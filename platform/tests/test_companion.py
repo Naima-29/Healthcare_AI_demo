@@ -4,6 +4,7 @@ import unittest
 
 from kcd_core.contracts import MessageType
 from kcd_core.contracts.messages import ClinicianDecision, DataRequest
+from kcd_core.pep import PolicyViolation
 
 from kcd.cortex import Cortex, HumanActor
 from kcd.cortex.auth import release_verifier
@@ -282,6 +283,72 @@ class CompanionTest(unittest.IsolatedAsyncioTestCase):
         renal = self.desk.delivered_to("renal_guardian")
         self.assertTrue(any(env.type == MessageType.DATA_DELIVERED and env.typed_payload().kind == "lab"
                             for env in renal))
+
+    async def test_say_blocks_restricted_text_without_release(self):
+        companion, runtime = await self.start_companion()
+        with self.assertRaises(PolicyViolation):
+            await companion._say(runtime.context(), "pt_marco", "Your CT shows a 3 cm mass.")
+        self.assertEqual(self.channel.outbox, [])
+
+    async def test_say_sends_ordinary_text_without_release(self):
+        companion, runtime = await self.start_companion()
+        await companion._say(runtime.context(), "pt_marco", "When did the pain start?")
+        self.assertEqual(len(self.channel.outbox), 1)
+        self.assertEqual(self.channel.outbox[0]["text"], "When did the pain start?")
+
+    async def test_clinician_decision_with_valid_imaging_release_is_sent(self):
+        companion, runtime = await self.start_companion()
+        artifact_hash = "sha256:" + "c" * 64
+        release = self.desk.release(
+            "case-1",
+            artifact_hash,
+            classes=["imaging_result"],
+            release_id="rel_imaging",
+        )
+        decision = ClinicianDecision(
+            case_id="case-1",
+            decision_id="rel_imaging",
+            artifact_hash=artifact_hash,
+            signed_by="dr_rossi",
+            role="nephrologist",
+            items=[{
+                "code": "imaging_result",
+                "patient_text": "Your CT shows a 3 cm mass.",
+            }],
+            signature=release.sig,
+            release=release,
+        )
+
+        await companion._deliver_signed_decision(
+            runtime.context(), "pt_marco", decision
+        )
+
+        self.assertTrue(
+            any("Your CT shows a 3 cm mass." in m["text"]
+                for m in self.channel.outbox)
+        )
+
+    async def test_clinician_decision_without_imaging_release_is_blocked(self):
+        companion, runtime = await self.start_companion()
+        decision = ClinicianDecision(
+            case_id="case-1",
+            decision_id="rel_unreleased",
+            artifact_hash="sha256:" + "d" * 64,
+            signed_by="dr_rossi",
+            role="nephrologist",
+            items=[{
+                "code": "imaging_result",
+                "patient_text": "Your CT shows a 3 cm mass.",
+            }],
+            signature="placeholder-signature",
+        )
+
+        with self.assertRaises(PolicyViolation):
+            await companion._deliver_signed_decision(
+                runtime.context(), "pt_marco", decision
+            )
+
+        self.assertEqual(self.channel.outbox, [])
 
     async def test_forwards_provenanced_clinician_decision_wording(self):
         companion, runtime = await self.start_companion()
