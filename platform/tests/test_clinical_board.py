@@ -43,12 +43,18 @@ class ClinicalBoardTest(unittest.IsolatedAsyncioTestCase):
             self.desk.clinician_keys.add(cid, s.public_key)
             self.people[cid] = Clinician(cid, name, role, s)
         self.confirmed = []
-        self.board = ClinicalBoard(list(self.people.values()), self.desk.clock.now,
-                                   confirm_rule=lambda *a: self.confirmed.append(a))
+        self.km = KnowledgeModel.load()
+        drug_names = [name for drug_class in self.km.data["drug_classes"] for name in drug_class["names"]]
+        self.board = ClinicalBoard(
+            list(self.people.values()),
+            self.desk.clock.now,
+            confirm_rule=lambda *a: self.confirmed.append(a),
+            drug_names=drug_names,
+        )
         self.desk.gates = self.desk.dispatcher.gates = self.board
         self.seat = CaseBriefer(now=self.desk.clock.now)
         self.rt = await self.desk.add_seat(self.seat, briefer_tools(
-            FolderFhir(root), KnowledgeModel.load(), self.desk.clock.now, self.board.create_item))
+            FolderFhir(root), self.km, self.desk.clock.now, self.board.create_item))
         self.companion = await self._companion()
         self.board.decide = lambda pid, rel, items, note: self.seat.publish_decision(
             self.rt.context(), patient_id=pid, release=rel, items=items, note=note)
@@ -102,6 +108,8 @@ class ClinicalBoardTest(unittest.IsolatedAsyncioTestCase):
         await self.desk.bus.drain()
         self.assertEqual([i.code for i in decision.items], ["urgent_visit", "stop_nsaid"])
         self.assertEqual(decision.signed_by, "dr_rossi")
+        self.assertIsNotNone(decision.release)
+        self.assertIn("dose_instruction", decision.release.content_classes)
         self.assertEqual(decision.role, "nephrologist")
         self.assertEqual(self.companion.told_patient[1]["text"], "Stop ibuprofen from today; take paracetamol only.")
         self.assertEqual(self.board.get(item["id"])["status"], "signed")

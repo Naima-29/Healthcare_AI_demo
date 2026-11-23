@@ -207,7 +207,7 @@ class CaseBriefer(Seat):
                                   "release does not cover the edited decision text")
         decision = ClinicianDecision(case_id=c.case_id, decision_id=release.id, artifact_hash=release.artifact_hash,
                                      signed_by=release.clinician_id, role=_human_role(release.role), note=note,
-                                     items=items, signature=release.sig)
+                                     items=items, signature=release.sig, release=release)
         for to in ("archivist", "companion"):
             await ctx.send(MessageType.CLINICIAN_DECISION, to, decision, patient_id=patient_id,
                            episode_id=c.episode_id)

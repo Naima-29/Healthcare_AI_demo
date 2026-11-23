@@ -15,6 +15,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .release import Release
+
 
 class MessageType(StrEnum):
     SYMPTOM_REPORT = "symptom_report"
@@ -213,6 +215,7 @@ class ClinicianDecision(_Strict):
     note: str | None = None
     items: list[DecisionItem] = Field(min_length=1)
     signature: str | None = None
+    release: Release | None = None
 
 
 # --- acknowledgment -----------------------------------------------------------

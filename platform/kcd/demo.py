@@ -33,6 +33,7 @@ from kcd.imaging.model import CallableCtModel, CtModel, FixedCtModel, HttpCtMode
 from kcd.imaging.pacs import FolderPacs
 from kcd.knowledge import KnowledgeModel
 from kcd.patient.channel import PatientChannel
+from kcd.patient_content import patient_content_classes
 from kcd.seats.archivist import Archivist
 from kcd.seats.briefer_tools import briefer_tools
 from kcd.seats.case_briefer import CaseBriefer
@@ -148,13 +149,19 @@ async def run(model: CtModel, calibration: Calibration | None, db: str, blobs: s
         await desk.bus.drain()
         _say("6. Case pack on the Board (gate opened by the Dispatcher)",
              {"case_id": pack.case_id, "gates": pack.gates, "sbar": pack.sbar.model_dump()})
-        release = desk.release(pack.case_id, pack.artifact_hash, release_id="dec-1")
-        decision = await briefer.publish_decision(rt["case_briefer"].context(), patient_id=PATIENT, release=release,
-                                                  items=[DecisionItem(code="stop_nsaid", patient_text=(
-                                                      "Please stop ibuprofen. Your doctor will suggest another "
-                                                      "painkiller.")),
-                                                         DecisionItem(code="urgent_visit", patient_text=(
-                                                             "Please come to the hospital today for a check."))])
+        decision_items = [
+            DecisionItem(
+                code="stop_nsaid",
+                patient_text="Please stop ibuprofen. Your doctor will suggest another painkiller.",
+            ),
+            DecisionItem(code="urgent_visit", patient_text="Please come to the hospital today for a check."),
+        ]
+        drug_names = [name for drug_class in km.data["drug_classes"] for name in drug_class["names"]]
+        patient_text = " ".join(item.patient_text for item in decision_items)
+        content_classes = sorted(patient_content_classes(patient_text, drug_names))
+        release = desk.release(pack.case_id, pack.artifact_hash, release_id="dec-1", classes=content_classes)
+        decision = await briefer.publish_decision(
+            rt["case_briefer"].context(), patient_id=PATIENT, release=release, items=decision_items)
         await desk.bus.drain()
         _say("7. Signed decision -> what the Companion may tell Marco", companion.told_patient)
 

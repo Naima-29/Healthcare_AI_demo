@@ -35,7 +35,12 @@ UNSAFE = {
     "Increase the dose of your medicine.": "dose_instruction",
     "Stop taking your sunitinib.": "dose_instruction",  # a drug the Knowledge Model does not know
     "Smetta di prendere il sunitinib.": "dose_instruction",
+    "L'ibuprofene deve essere sospeso.": "dose_instruction",
+    "Il farmaco deve essere sospeso.": "dose_instruction",
+    "La terapia deve essere interrotta.": "dose_instruction",
     "Avoid ibuprofen from now on.": "dose_instruction",
+    "Ibuprofen should be stopped.": "dose_instruction",
+    "You should discontinue ibuprofen.": "dose_instruction",
     "I will prescribe you a new painkiller.": "prescription",
     "You carry a pathogenic VHL variant.": "genetic_result",
     "Lei è portatrice di una mutazione.": "genetic_result",

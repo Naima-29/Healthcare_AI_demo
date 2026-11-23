@@ -80,8 +80,13 @@ def genomics_tools(panels: PanelSource, fhir: FolderFhir, rules: VariantRules | 
             "fhir.get_conditions": get_conditions}
 
 
-def clinical_tools(fhir: FolderFhir, km: KnowledgeModel, now: Callable[[], datetime],
-                   wearables: Mapping[str, dict[str, Any]] | None = None) -> dict[str, Tool]:
+def clinical_tools(
+    fhir: FolderFhir,
+    km: KnowledgeModel,
+    now: Callable[[], datetime],
+    wearables: Mapping[str, dict[str, Any]] | None = None,
+    wearables_consent: Callable[[str], bool] | None = None,
+) -> dict[str, Tool]:
     """Tools for the Renal Guardian and the Safety Verifier. `wearables` maps patient id -> 7-day summary."""
     summaries = dict(wearables or {})
 
@@ -95,6 +100,11 @@ def clinical_tools(fhir: FolderFhir, km: KnowledgeModel, now: Callable[[], datet
         return fhir.medications(patient_id)
 
     async def wearables_read(patient_id: str, days: int = 30) -> dict[str, Any]:
+        if wearables_consent is None or not wearables_consent(patient_id):
+            raise PermissionError(
+                "explicit patient consent is required before reading wearables"
+        )
+
         return {"summary_7d": dict(summaries.get(patient_id, {}))}
 
     async def check_conflicts(**kwargs: Any) -> list[dict[str, Any]]:
