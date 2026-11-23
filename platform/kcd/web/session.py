@@ -158,7 +158,7 @@ class Session:
 
         audit = ObservedAudit(hub, self.metrics, catalog, self._on_violation)
         bus = ObservedBus(hub, self.metrics)
-        self.board = ClinicalBoard([], self.clock.now)  # Chrislin's Board; clinicians and actions wired below
+        self.board = ClinicalBoard([], self.clock.now, drug_names=[name for drug_class in self.km.data["drug_classes"] for name in drug_class["names"]])  # Chrislin's Board; clinicians and actions wired below
         self.board.subscribe(lambda ev: hub.publish("board", {"op": ev["op"], "item": {
             "id": ev["item"]["id"], "kind": ev["item"]["kind"], "patient": ev["item"].get("patient_id")}}))
         self.desk = desk = await Desk.create(clock=self.clock, audit=audit, bus=bus, gates=self.board, pager=self)

@@ -23,7 +23,7 @@ Rules enforced here, on top of what the Case Briefer and the PEP verify again:
 from __future__ import annotations
 
 import copy
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -33,6 +33,7 @@ from kcd_core.contracts.messages import CasePackReady, ClinicianDecision, Decisi
 from kcd_core.signing import Signer, sign_release
 
 from kcd.seats.case_briefer import decision_release_id
+from kcd.patient_content import patient_content_classes
 
 GATE_ROLE = {  # catalogue gates -> the role that must act
     "radiologist_review": "clinician:radiology",
@@ -70,9 +71,11 @@ class ClinicalBoard:
     def __init__(self, clinicians: list[Clinician], clock: Callable[[], datetime], *,
                  decide: Decide | None = None, confirm_rule: RuleAction | None = None,
                  reject_rule: RuleAction | None = None,
-                 acknowledge: Callable[[str, str], Awaitable[Any]] | None = None) -> None:
+                 acknowledge: Callable[[str, str], Awaitable[Any]] | None = None,
+                 drug_names: Iterable[str] = ()) -> None:
         self.clinicians = {c.id: c for c in clinicians}
         self.clock = clock
+        self.drug_names = tuple(drug_names)
         self.decide = decide  # set after the Case Briefer exists: board.decide = lambda ...
         self.confirm_rule_fn = confirm_rule
         self.reject_rule_fn = reject_rule
@@ -226,8 +229,10 @@ class ClinicalBoard:
                                       clinician_text=d.get("clinician_text")))
         if not items:
             raise BoardError("nothing selected: a decision needs at least one item")
+        patient_text = "\n".join(i.patient_text for i in items)
+        classes = sorted(patient_content_classes(patient_text, self.drug_names))
         rel = self._release(c, item["case_id"], item["artifact_hash"],
-                            decision_release_id(items, note, item["artifact_hash"]))
+                            decision_release_id(items, note, item["artifact_hash"]), classes=classes)
         decision = await self.decide(item["patient_id"], rel, items, note)
         item["status"] = "signed"
         item.update(signed_by=c.id, signed_role=c.role, decision_id=decision.decision_id)
