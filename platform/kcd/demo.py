@@ -150,7 +150,10 @@ async def run(model: CtModel, calibration: Calibration | None, db: str, blobs: s
         _say("6. Case pack on the Board (gate opened by the Dispatcher)",
              {"case_id": pack.case_id, "gates": pack.gates, "sbar": pack.sbar.model_dump()})
         decision_items = [
-            DecisionItem(code="stop_nsaid", patient_text="Please stop ibuprofen. Your doctor will suggest another painkiller."),
+            DecisionItem(
+                code="stop_nsaid",
+                patient_text="Please stop ibuprofen. Your doctor will suggest another painkiller.",
+            ),
             DecisionItem(code="urgent_visit", patient_text="Please come to the hospital today for a check."),
         ]
         drug_names = [name for drug_class in km.data["drug_classes"] for name in drug_class["names"]]

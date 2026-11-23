@@ -7,7 +7,6 @@ from collections.abc import Iterable
 
 from kcd.textguard import is_diagnosis_claim
 
-
 # ---------------------------------------------------------------------- patient-bound text
 _I = re.IGNORECASE
 _MED_WORDS = (r"medicines?|medications?|tablets?|pills?|capsules?|doses?|dosage|painkillers?|anti-?inflammator\w*"
@@ -57,13 +56,24 @@ def patient_content_classes(text: str | None, drug_names: Iterable[str] = ()) ->
     objects = _MED_WORDS + "".join("|" + re.escape(n) for n in drug_names)
     instruction = re.compile(rf"\b(?:{_DOSE_VERBS})\b[^.;:]{{0,40}}?\b(?:{objects})\b", _I)
     passive_instruction = re.compile(
-        rf"\b(?:{objects})\b[^.;:]{{0,40}}\b(?:should|must|need to|needs to|have to|has to)\s+(?:be\s+)?(?:stopped|discontinued|avoided)\b",
+        rf"\b(?:{objects})\b[^.;:]{{0,40}}\b(?:should|must|need to|needs to|have to|has to)\s+"
+        rf"(?:be\s+)?(?:stopped|discontinued|avoided)\b",
         _I,
     )
     passive_instruction_it = re.compile(
         rf"\b(?:{objects}|terapia)\b[^.;:]{{0,40}}\b(?:deve|devono|dovrebbe|dovrebbero|va|vanno)\s+(?:essere\s+)?(?:sospes[oaie]|interrott[oaie]|evitat[oaie])\b",
         _I,
     )
-    if any(p.search(text) for p in (instruction, passive_instruction, passive_instruction_it, _DOSE_AMOUNT, _DOSE_FREQUENCY, _TAKING_INSTRUCTION)):
+    if any(
+        p.search(text)
+        for p in (
+            instruction,
+            passive_instruction,
+            passive_instruction_it,
+            _DOSE_AMOUNT,
+            _DOSE_FREQUENCY,
+            _TAKING_INSTRUCTION,
+        )
+    ):
         found.add("dose_instruction")
     return found

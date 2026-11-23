@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from kcd_core.contracts import Envelope, MessageType
-from kcd_core.contracts.release import Release
 from kcd_core.contracts.messages import (
     ClinicianDecision,
     DataDelivered,
@@ -25,6 +24,7 @@ from kcd_core.contracts.messages import (
     Symptom,
     SymptomReport,
 )
+from kcd_core.contracts.release import Release
 from kcd_core.pep import PolicyViolation
 from kcd_core.runtime import Seat, SeatContext
 from pydantic import BaseModel
@@ -262,7 +262,15 @@ class Companion(Seat):
             for rule in mem.active_patient_rules()
         )
 
-    async def _say(self, ctx: SeatContext, patient_id: str, text: str, *, artifact_hash: str | None = None, release: Release | None = None) -> None:
+    async def _say(
+        self,
+        ctx: SeatContext,
+        patient_id: str,
+        text: str,
+        *,
+        artifact_hash: str | None = None,
+        release: Release | None = None,
+    ) -> None:
         drug_names = [name for drug_class in self.km.data["drug_classes"] for name in drug_class["names"]]
         guard_patient_text(ctx, text, artifact_hash=artifact_hash, release=release, drug_names=drug_names)
         await ctx.tool("channel.send", patient_id=patient_id, text=text)

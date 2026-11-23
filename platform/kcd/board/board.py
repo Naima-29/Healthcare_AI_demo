@@ -32,8 +32,8 @@ from kcd_core.contracts import Envelope, Release
 from kcd_core.contracts.messages import CasePackReady, ClinicianDecision, DecisionItem
 from kcd_core.signing import Signer, sign_release
 
-from kcd.seats.case_briefer import decision_release_id
 from kcd.patient_content import patient_content_classes
+from kcd.seats.case_briefer import decision_release_id
 
 GATE_ROLE = {  # catalogue gates -> the role that must act
     "radiologist_review": "clinician:radiology",

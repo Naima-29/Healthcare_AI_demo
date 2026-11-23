@@ -31,8 +31,8 @@ from kcd_core.pep import PolicyViolation
 from kcd_core.runtime import Seat, SeatContext
 from pydantic import BaseModel
 
-from kcd.textguard import is_diagnosis_claim
 from kcd.patient_content import patient_content_classes
+from kcd.textguard import is_diagnosis_claim
 
 PEER = "case_briefer"
 STALE_DAYS = 90
