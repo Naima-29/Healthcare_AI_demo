@@ -16,26 +16,39 @@ Patient-bound text (patient_content_classes / guard_patient_text): finds which o
 classes a message to the patient contains (diagnosis, imaging result, dose instruction, prescription, genetic
 result), in English and Italian, and asks the PEP for each one. The PEP blocks and audits any class that no
 valid clinician release covers. The patterns are a draft and must be reviewed by the clinical team.
+
+Cloud egress (approve_egress, contract C6 in docs/EGRESS_CONTRACT.md): de-identifies a payload (kcd.deidentify),
+checks the result again, and signs an EgressApproval over the exact de-identified payload for Core's egress gate:
+approved, or rejected with reasons when something identifying is still there. Proposed defaults, to confirm with
+the Core owner: valid 5 minutes, single use (enforced by the gate), the verifier builds the de-identified payload,
+the identifiers come from the patient's record. Not built yet: the A2A messages that carry the request and the
+approval between seats (contract question 5); for now the caller invokes approve_egress directly.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
-from kcd_core.contracts import Envelope, MessageType
+from kcd_core.audit import content_hash
+from kcd_core.contracts import EgressApproval, Envelope, MessageType
 from kcd_core.contracts.messages import Acknowledgment, DataDelivered, ImagingSignal, TherapyConflict
 from kcd_core.contracts.release import Release
+from kcd_core.egress import sign_approval
 from kcd_core.pep import PolicyViolation
 from kcd_core.runtime import Seat, SeatContext
+from kcd_core.signing import Signer
 from pydantic import BaseModel
 
+from kcd.deidentify import Identifiers, deidentify, residual_findings
 from kcd.textguard import is_diagnosis_claim
 
 PEER = "case_briefer"
 STALE_DAYS = 90
+EGRESS_TTL = timedelta(minutes=5)  # proposed; the gate refuses anything valid longer than 10 minutes
 
 # ---------------------------------------------------------------------- patient-bound text
 _I = re.IGNORECASE
@@ -146,6 +159,30 @@ class SafetyVerifier(Seat):
         failed = "; ".join(c["check"] for c in checks if not c["ok"])
         await ctx.send(MessageType.ACKNOWLEDGMENT, env.from_,
                        Acknowledgment(ack_of=str(env.id), status="rejected", reason=f"failed checks: {failed}"))
+
+    # ------------------------------------------------------------------ cloud egress
+    def approve_egress(self, payload: dict[str, Any], *, identifiers: Identifiers, target: str,
+                       requesting_seat: str, manifest_version: str, signer: Signer,
+                       ttl: timedelta = EGRESS_TTL) -> tuple[dict[str, Any], EgressApproval]:
+        """De-identify `payload`, check the result, and sign a decision over the de-identified payload.
+
+        Returns (de-identified payload, signed EgressApproval). Send exactly that payload with that approval
+        through Core's EgressGate: any change to it, or reuse of the approval, is blocked there. When something
+        identifying is left after de-identification, the decision is "rejected" with the reasons (never silence).
+        """
+        now = self.now()
+        clean, removed = deidentify(payload, identifiers, today=now)
+        left = residual_findings(clean, identifiers)
+        approval = EgressApproval(
+            id=f"appr_{uuid4().hex[:12]}", decision="rejected" if left else "approved",
+            payload_hash=content_hash(clean), target=target, approved_by=self.seat_id,  # any other key: refused
+            requesting_seat=requesting_seat, manifest_version=manifest_version, issued_at=now,
+            expires_at=now + ttl,
+            reason=("possible identifiers left after de-identification: " + ", ".join(sorted(left))) if left else None)
+        # for the A2A stream / Board: what was removed and the decision, never the payload
+        self.results.append({"type": "egress", "from": requesting_seat, "target": target, "approval_id": approval.id,
+                             "passed": not left, "removed": sorted(removed), "left": sorted(left)})
+        return clean, sign_approval(approval, signer)
 
     # ------------------------------------------------------------------ checks
     @staticmethod
