@@ -12,3 +12,4 @@ dist/
 
 # Model weights (never commit; see platform/kcd/imaging/MODEL_CARD_chrislin.md)
 models/
+keys/

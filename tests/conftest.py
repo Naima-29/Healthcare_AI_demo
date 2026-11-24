@@ -139,3 +139,76 @@ async def desk(catalog: PolicyCatalog, registry: ManifestRegistry):  # type: ign
              escalations, dispatcher)
     yield d
     await bus.close()
+
+
+# ---------------------------------------------------------------------------
+# Real infrastructure (Postgres, NATS). Skipped automatically when not reachable, so `pytest` still runs anywhere.
+#   docker compose -f infra/docker-compose.yml up -d postgres nats
+#   KCD_TEST_DSN / KCD_TEST_NATS_URL override the defaults. Tests never touch the dev `kcd` database: every test
+#   gets its own throwaway schema with the real migrations applied.
+# ---------------------------------------------------------------------------
+
+import os  # noqa: E402
+import uuid  # noqa: E402
+
+TEST_DSN = os.environ.get("KCD_TEST_DSN", "postgresql://kcd:kcd_dev@localhost:5432/kcd_test")
+TEST_NATS = os.environ.get("KCD_TEST_NATS_URL", "nats://localhost:4222")
+MIGRATIONS = ROOT / "infra" / "migrations"
+
+
+def _pg_available() -> bool:
+    try:
+        import psycopg
+
+        with psycopg.connect(TEST_DSN, connect_timeout=2) as conn:
+            conn.execute("SELECT 1")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+@pytest.fixture
+def pg():  # type: ignore[no-untyped-def]
+    """A pool on a fresh schema with all migrations applied. Dropped afterwards."""
+    if not _pg_available():
+        pytest.skip(f"Postgres not reachable at {TEST_DSN}")
+    import psycopg
+    from kcd_core.adapters._pg import make_pool
+    from kcd_core.migrate import apply_migrations
+
+    schema = f"t_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(TEST_DSN, autocommit=True) as admin:
+        for ext in ("pgcrypto", "vector"):
+            admin.execute(f'CREATE EXTENSION IF NOT EXISTS "{ext}" SCHEMA public')
+        admin.execute(f"CREATE SCHEMA {schema}")
+    options = f"-c search_path={schema},public"
+    apply_migrations(TEST_DSN, MIGRATIONS, options=options)
+    pool = make_pool(TEST_DSN, options=options, max_size=8, name="kcd-test")
+    yield pool
+    pool.close()
+    with psycopg.connect(TEST_DSN, autocommit=True) as admin:
+        admin.execute(f"DROP SCHEMA {schema} CASCADE")
+
+
+@pytest_asyncio.fixture
+async def nats_js():  # type: ignore[no-untyped-def]
+    """A clean JetStream: the KCD streams are deleted before and after each test."""
+    import nats
+
+    try:
+        nc = await nats.connect(TEST_NATS, connect_timeout=1, max_reconnect_attempts=0)
+    except Exception:  # noqa: BLE001
+        pytest.skip(f"NATS not reachable at {TEST_NATS}")
+    js = nc.jetstream()
+
+    async def wipe() -> None:
+        for name in ("KCD_A2A", "KCD_DLQ"):
+            try:
+                await js.delete_stream(name)
+            except Exception:  # noqa: BLE001
+                pass
+
+    await wipe()
+    yield nc
+    await wipe()
+    await nc.close()
