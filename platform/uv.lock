@@ -471,9 +471,21 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=42" },
+    { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.115,<1" },
+    { name = "httpx", marker = "extra == 'adapters'", specifier = ">=0.27,<1" },
+    { name = "kcd-core", extras = ["adapters"], marker = "extra == 'connectors'" },
+    { name = "kcd-core", extras = ["adapters", "connectors"], marker = "extra == 'service'" },
+    { name = "mcp", marker = "extra == 'connectors'", specifier = ">=1.9,<2" },
+    { name = "nats-py", marker = "extra == 'adapters'", specifier = ">=2.7,<3" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'adapters'", specifier = ">=3.1,<4" },
+    { name = "psycopg-pool", marker = "extra == 'adapters'", specifier = ">=3.1,<4" },
     { name = "pydantic", specifier = ">=2.7,<3" },
+    { name = "pydantic-settings", marker = "extra == 'service'", specifier = ">=2.4,<3" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'service'", specifier = ">=2.9,<3" },
     { name = "rfc8785", specifier = ">=0.1.4" },
+    { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.30" },
 ]
+provides-extras = ["adapters", "connectors", "service"]
 
 [package.metadata.requires-dev]
 dev = [

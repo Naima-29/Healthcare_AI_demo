@@ -1,0 +1,94 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "approved_by": {
+      "description": "Key id of the signer; Core accepts only the Safety Verifier",
+      "title": "Approved By",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "approved",
+        "rejected"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "id": {
+      "description": "Unique per decision; an approval can be used once",
+      "minLength": 8,
+      "title": "Id",
+      "type": "string"
+    },
+    "issued_at": {
+      "format": "date-time",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "manifest_version": {
+      "description": "Manifest.ref of the requesting seat when this was decided",
+      "title": "Manifest Version",
+      "type": "string"
+    },
+    "payload_hash": {
+      "description": "content_hash of the anonymised payload",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Payload Hash",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Required when rejected",
+      "title": "Reason"
+    },
+    "requesting_seat": {
+      "title": "Requesting Seat",
+      "type": "string"
+    },
+    "sig": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sig"
+    },
+    "target": {
+      "description": "The cloud model/service this decision is for",
+      "minLength": 1,
+      "title": "Target",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "decision",
+    "payload_hash",
+    "target",
+    "approved_by",
+    "requesting_seat",
+    "manifest_version",
+    "issued_at",
+    "expires_at"
+  ],
+  "title": "EgressApproval",
+  "type": "object"
+}

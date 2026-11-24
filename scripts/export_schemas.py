@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-from kcd_core.contracts import PAYLOADS, Envelope, Manifest, PolicyCatalog, Release
+from kcd_core.contracts import PAYLOADS, EgressApproval, Envelope, Manifest, PolicyCatalog, Release
 
 OUT = Path(__file__).resolve().parents[1] / "contracts" / "schemas"
 
@@ -25,6 +25,7 @@ def render() -> dict[Path, str]:
     put("manifest.schema.json", Manifest.model_json_schema())
     put("policy_catalog.schema.json", PolicyCatalog.model_json_schema())
     put("release.schema.json", Release.model_json_schema())
+    put("egress_approval.schema.json", EgressApproval.model_json_schema())
     for type_, model in PAYLOADS.items():
         put(f"messages/{type_.value}.schema.json", model.model_json_schema())
     return files
