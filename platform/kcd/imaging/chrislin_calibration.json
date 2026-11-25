@@ -1,0 +1,8 @@
+{
+  "temperature": 0.798,
+  "model_version": "chrislin-kidney-ct phase8 (convnext_tiny masked_norm x5)",
+  "n_samples": 0,
+  "ece_before": null,
+  "ece_after": 0.026,
+  "fitted_at": null
+}

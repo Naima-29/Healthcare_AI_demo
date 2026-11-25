@@ -1,0 +1,17 @@
+{
+  "genomic_profile_id": "GEN-MR-2026-0099",
+  "patient_id": "marco-r",
+  "profiling_date": "2026-09-01",
+  "profiling_method": "Targeted NGS Panel (NephroGenome v2.1)",
+  "synthetic": true,
+  "variants": [
+    {
+      "gene": "VHL",
+      "variant_id": "rs5030827",
+      "hgvs_notation": "c.499C>T (p.Arg167Trp)",
+      "zygosity": "heterozygous",
+      "clinical_significance": "pathogenic",
+      "associated_condition": "von Hippel-Lindau disease"
+    }
+  ]
+}

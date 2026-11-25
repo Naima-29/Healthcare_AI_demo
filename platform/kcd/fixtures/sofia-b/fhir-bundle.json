@@ -1,0 +1,176 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "meta": {
+    "tag": [
+      {
+        "code": "SYNTHETIC",
+        "display": "Synthetic edge-case patient - no real data"
+      }
+    ]
+  },
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "sofia-b",
+        "name": [
+          {
+            "family": "B.",
+            "given": [
+              "Sofia"
+            ]
+          }
+        ],
+        "gender": "female",
+        "birthDate": "1969-07-02"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10",
+              "code": "C64.2",
+              "display": "Malignant neoplasm of left kidney (clear-cell RCC), VHL carrier"
+            }
+          ]
+        },
+        "onsetDateTime": "2023-06-01"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10",
+              "code": "N18.3",
+              "display": "Chronic kidney disease, stage 3"
+            }
+          ]
+        },
+        "onsetDateTime": "2025-02-11"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10",
+              "code": "I10",
+              "display": "Essential (primary) hypertension"
+            }
+          ]
+        },
+        "onsetDateTime": "2021-09-30"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "medicationCodeableConcept": {
+          "text": "Sunitinib (TKI)"
+        },
+        "status": "active"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "medicationCodeableConcept": {
+          "text": "Amlodipine 5 mg"
+        },
+        "status": "active"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "text": "eGFR"
+        },
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "effectiveDateTime": "2024-04-02",
+        "valueQuantity": {
+          "value": 68,
+          "unit": "mL/min/1.73m2"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "text": "eGFR"
+        },
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "effectiveDateTime": "2025-02-11",
+        "valueQuantity": {
+          "value": 61,
+          "unit": "mL/min/1.73m2"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "text": "eGFR"
+        },
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "effectiveDateTime": "2026-05-01",
+        "valueQuantity": {
+          "value": 55,
+          "unit": "mL/min/1.73m2"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "text": "Creatinine"
+        },
+        "subject": {
+          "reference": "Patient/sofia-b"
+        },
+        "effectiveDateTime": "2026-05-01",
+        "valueQuantity": {
+          "value": 1.18,
+          "unit": "mg/dL"
+        }
+      }
+    }
+  ]
+}

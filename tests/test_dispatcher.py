@@ -84,6 +84,22 @@ async def test_red_flag_pages_on_call_and_routes_to_case_briefer(desk):
     assert delivered_to(desk, "case_briefer") == [env]
 
 
+async def test_one_red_flag_sent_to_two_seats_pages_once(desk):
+    # The Companion's route sends each red flag to the Case Briefer and the Archivist (found by the
+    # edge-case scenario, platform/kcd/scenarios/edge_cases.py): one emergency must page one doctor once.
+    for to in ("case_briefer", "archivist"):
+        await desk.bus.publish(DISPATCHER_INBOX, desk.envelope(MessageType.RED_FLAG_ESCALATION, "companion", to,
+                                                               RED_FLAG))
+    await desk.bus.drain()
+    assert [t for t, _ in desk.pager.pages] == ["dr_rossi"]
+    assert len(delivered_to(desk, "case_briefer")) == len(delivered_to(desk, "archivist")) == 1
+    other_episode = desk.envelope(MessageType.RED_FLAG_ESCALATION, "companion", "case_briefer", RED_FLAG,
+                                  episode="ep_2")
+    await desk.bus.publish(DISPATCHER_INBOX, other_episode)
+    await desk.bus.drain()
+    assert len(desk.pager.pages) == 2  # a new episode is a new emergency
+
+
 async def test_case_pack_opens_gate(desk):
     pack = {**payload(MessageType.CASE_PACK_READY), "artifact_hash": sha("pack v1")}
     env = desk.envelope(MessageType.CASE_PACK_READY, "case_briefer", "dispatcher", pack)

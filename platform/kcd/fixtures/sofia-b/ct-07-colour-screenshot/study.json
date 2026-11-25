@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.07",
+  "modality": "CT",
+  "acquired": "2026-06-10T09:00:00Z",
+  "description": "Synthetic: colour screenshot, not a CT slice",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}

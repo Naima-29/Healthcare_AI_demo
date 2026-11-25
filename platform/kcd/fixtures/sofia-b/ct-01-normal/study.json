@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.01",
+  "modality": "CT",
+  "acquired": "2026-01-10T09:00:00Z",
+  "description": "Synthetic: clear normal kidneys",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}

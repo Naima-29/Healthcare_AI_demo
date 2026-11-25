@@ -1,23 +1,42 @@
 // Knowledge Model (L0 medical knowledge + L1 specialty playbook).
-// Every rule carries the citation the Safety Verifier will require.
-// NOTE: clinical rules here are a demo knowledge base; they must be reviewed
+// The medical content now lives in rules.json (editable, reviewable data).
+// This file only LOADS that data and applies it. Every rule carries the
+// citation the Safety Verifier will require.
+// NOTE: clinical rules are a demo knowledge base; they must be reviewed
 // by the clinical team before any real use.
 
-export const CITATIONS = {
-  KDIGO2024: '[14] KDIGO 2024 CKD Guideline, Kidney Int 2024;105(4S):S117-S314',
-  EAU_RCC: '[15] EAU Guidelines on Renal Cell Carcinoma (current edition)',
-  ACMG2015: '[16] Richards S et al. ACMG/AMP variant interpretation, Genet Med 2015;17:405-424',
-  VHL2011: '[17] Maher ER et al. von Hippel-Lindau disease, Eur J Hum Genet 2011;19:617-623',
-  BEERS2023: '[3] AGS Beers Criteria 2023 update, J Am Geriatr Soc 2023;71:2052-2081',
-  TKI_LABEL: 'Sunitinib SmPC - hypertension and proteinuria are labelled adverse effects',
-  PLAYBOOK: 'L1 nephro-oncology playbook (Loop demo; to be validated by the clinical team)',
-  APOL1: 'APOL1-mediated kidney disease: high-risk genotype = two risk alleles (G1/G2), recessive model',
-};
+import { readFileSync } from 'node:fs';
 
-export const DRUG_CLASSES = [
-  { re: /\b(ibuprofen[eo]?|brufen|moment|nurofen|ketoprofen[eo]?|oki|diclofenac|voltaren|naprossene|naproxen|aspirin[ae]?|nsaid|fans)\b/i, drug: 'ibuprofen', class: 'NSAID' },
-  { re: /\b(paracetamol[eo]?|tachipirina|acetaminophen)\b/i, drug: 'paracetamol', class: 'non_NSAID_analgesic' },
-];
+// ---------- load + check the data file ----------
+const DATA = JSON.parse(readFileSync(new URL('./rules.json', import.meta.url), 'utf-8'));
+
+// Fail early, with a clear message, if the data file has a mistake.
+function validateKnowledge(d) {
+  const problems = [];
+  const known = new Set(Object.keys(d.citations || {}));
+  const classes = new Set((d.drug_classes || []).map((c) => c.class));
+  if (!known.has(d.ckd_stage_citation)) problems.push(`ckd_stage_citation "${d.ckd_stage_citation}" is not in citations`);
+  for (const r of d.conflict_rules || []) {
+    if (!classes.has(r.drug_class)) problems.push(`rule ${r.id}: unknown drug_class "${r.drug_class}"`);
+    for (const t of r.triggers || []) {
+      if (!known.has(t.citation)) problems.push(`rule ${r.id}, trigger ${t.id}: citation "${t.citation}" is not in citations`);
+    }
+  }
+  if (problems.length) throw new Error('rules.json problems:\n - ' + problems.join('\n - '));
+}
+validateKnowledge(DATA);
+
+export const CITATIONS = DATA.citations;
+
+// ---------- drugs ----------
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Build one word-matching pattern per drug class from its list of names.
+export const DRUG_CLASSES = DATA.drug_classes.map((c) => ({
+  re: new RegExp(`\\b(${[...c.names].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})\\b`, 'i'),
+  drug: c.label,
+  class: c.class,
+}));
 
 export function classifyDrug(text) {
   for (const d of DRUG_CLASSES) {
@@ -27,10 +46,12 @@ export function classifyDrug(text) {
   return null;
 }
 
+// ---------- kidney stage ----------
 export function ckdStage(egfr) {
   if (egfr == null) return null;
-  const g = egfr >= 90 ? 'G1' : egfr >= 60 ? 'G2' : egfr >= 45 ? 'G3a' : egfr >= 30 ? 'G3b' : egfr >= 15 ? 'G4' : 'G5';
-  return { stage: g, egfr, citation: CITATIONS.KDIGO2024 };
+  // First stage whose minimum eGFR we reach; the last stage has no minimum (catch-all).
+  const found = DATA.ckd_stages.find((s) => s.min_egfr == null || egfr >= s.min_egfr);
+  return { stage: found.stage, egfr, citation: CITATIONS[DATA.ckd_stage_citation] };
 }
 
 // Red-flag patterns for a patient in RCC follow-up (L1 playbook).
@@ -56,21 +77,45 @@ export function redFlags(ctx) {
   return null;
 }
 
+// ---------- drug-disease conflicts ----------
+const fill = (template, values) => template.replace(/\{(\w+)\}/g, (_, k) => values[k]);
+
+// Does this trigger apply to the patient? Returns the reason text, or null.
+function applyTrigger(t, { egfr, sbp, conditions, medications }) {
+  switch (t.type) {
+    case 'egfr_below':
+      if (egfr != null && egfr < t.value) return fill(t.reason, { stage: ckdStage(egfr).stage, egfr });
+      return null;
+    case 'hypertension':
+      if (conditions.some((c) => /hypertension/i.test(c)) || (sbp ?? 0) >= t.sbp_at_least) {
+        return sbp ? fill(t.reason_with_sbp, { sbp }) : t.reason;
+      }
+      return null;
+    case 'medication_contains':
+      if (medications.some((m) => t.names.some((n) => m.toLowerCase().includes(n.toLowerCase())))) return t.reason;
+      return null;
+    default:
+      throw new Error(`Unknown trigger type "${t.type}"`);
+  }
+}
+
 // Drug-disease conflicts (systemic medicine - slide 4 of the deck).
 export function checkConflicts({ drugClass, egfr, sbp, conditions = [], medications = [] }) {
   const out = [];
-  if (drugClass === 'NSAID') {
+  for (const rule of DATA.conflict_rules) {
+    if (rule.drug_class !== drugClass) continue;
     const reasons = [];
     const cites = [];
-    if (egfr != null && egfr < 60) { reasons.push(`CKD ${ckdStage(egfr).stage} (eGFR ${egfr})`); cites.push(CITATIONS.KDIGO2024); }
-    if (conditions.some((c) => /hypertension/i.test(c)) || (sbp ?? 0) >= 140) {
-      reasons.push(`hypertension${sbp ? ` (home SBP ~${sbp} mmHg)` : ''}`); cites.push(CITATIONS.BEERS2023);
+    for (const t of rule.triggers) {
+      const reason = applyTrigger(t, { egfr, sbp, conditions, medications });
+      if (reason) { reasons.push(reason); cites.push(CITATIONS[t.citation]); }
     }
-    if (medications.some((m) => /sunitinib|tki/i.test(m))) { reasons.push('TKI therapy (hypertension, proteinuria)'); cites.push(CITATIONS.TKI_LABEL); }
     if (reasons.length) {
       out.push({
-        drug: 'NSAID (ibuprofen)', conditions: reasons, severity: reasons.length >= 2 ? 'high' : 'moderate',
-        rationale: 'NSAIDs reduce renal perfusion and raise blood pressure; prolonged use is to be avoided in CKD, particularly with eGFR < 60 and uncontrolled hypertension.',
+        drug: rule.display_drug,
+        conditions: reasons,
+        severity: reasons.length >= 2 ? rule.severity.two_or_more_reasons : rule.severity.one_reason,
+        rationale: rule.rationale,
         citations: cites,
       });
     }

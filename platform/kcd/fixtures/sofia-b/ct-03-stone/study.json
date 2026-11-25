@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.03",
+  "modality": "CT",
+  "acquired": "2026-03-10T09:00:00Z",
+  "description": "Synthetic: kidney stone",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}

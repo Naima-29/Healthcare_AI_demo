@@ -1,0 +1,88 @@
+{
+  "2.25.sofiab.01": {
+    "folder": "01-normal",
+    "tests": "clear normal kidneys",
+    "probs": {
+      "normal": 0.91,
+      "cyst": 0.04,
+      "stone": 0.03,
+      "tumor": 0.02
+    }
+  },
+  "2.25.sofiab.02": {
+    "folder": "02-cyst",
+    "tests": "simple cyst",
+    "probs": {
+      "normal": 0.05,
+      "cyst": 0.88,
+      "stone": 0.04,
+      "tumor": 0.03
+    }
+  },
+  "2.25.sofiab.03": {
+    "folder": "03-stone",
+    "tests": "kidney stone",
+    "probs": {
+      "normal": 0.04,
+      "cyst": 0.03,
+      "stone": 0.9,
+      "tumor": 0.03
+    }
+  },
+  "2.25.sofiab.04": {
+    "folder": "04-tumor",
+    "tests": "renal mass (follow-up CT)",
+    "probs": {
+      "normal": 0.01,
+      "cyst": 0.02,
+      "stone": 0.02,
+      "tumor": 0.95
+    }
+  },
+  "2.25.sofiab.05": {
+    "folder": "05-uncertain",
+    "tests": "model unsure (out of distribution)",
+    "probs": {
+      "normal": 0.3,
+      "cyst": 0.26,
+      "stone": 0.22,
+      "tumor": 0.22
+    }
+  },
+  "2.25.sofiab.06": {
+    "folder": "06-small-low-contrast",
+    "tests": "poor image: 96 px, almost no contrast",
+    "probs": {
+      "normal": 0.86,
+      "cyst": 0.05,
+      "stone": 0.05,
+      "tumor": 0.04
+    }
+  },
+  "2.25.sofiab.07": {
+    "folder": "07-colour-screenshot",
+    "tests": "colour screenshot, not a CT slice",
+    "probs": {
+      "normal": 0.87,
+      "cyst": 0.05,
+      "stone": 0.04,
+      "tumor": 0.04
+    }
+  },
+  "2.25.sofiab.09": {
+    "folder": "09-model-down",
+    "tests": "CT model service down",
+    "raise": "CT model service unavailable (HTTP 503)"
+  },
+  "2.25.sofiab.10": {
+    "folder": "10-other-model-version",
+    "tests": "model updated, calibration not refitted",
+    "probs": {
+      "normal": 0.93,
+      "cyst": 0.03,
+      "stone": 0.02,
+      "tumor": 0.02
+    },
+    "model_version": "stub-scripted-v2-untested"
+  }
+}

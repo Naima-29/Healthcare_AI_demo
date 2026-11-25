@@ -1,0 +1,8 @@
+{
+  "study_uid": "2.25.sofiab.02",
+  "modality": "CT",
+  "acquired": "2026-02-10T09:00:00Z",
+  "description": "Synthetic: simple cyst",
+  "source": "synthetic (kcd.fixtures.make_sofia)",
+  "key_image": "key.png"
+}

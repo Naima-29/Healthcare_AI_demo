@@ -1,0 +1,62 @@
+{
+  "genomic_profile_id": "GEN-SB-2026-0042",
+  "patient_id": "sofia-b",
+  "profiling_date": "2026-03-02",
+  "profiling_method": "Targeted NGS Panel (NephroGenome v2.1)",
+  "synthetic": true,
+  "variants": [
+    {
+      "gene": "VHL",
+      "variant_id": "rs5030827",
+      "hgvs_notation": "c.499C>T (p.Arg167Trp)",
+      "zygosity": "heterozygous",
+      "clinical_significance": "pathogenic",
+      "associated_condition": "von Hippel-Lindau disease"
+    },
+    {
+      "gene": "FH",
+      "variant_id": "rs121913123",
+      "hgvs_notation": "c.1431_1433dup",
+      "zygosity": "heterozygous",
+      "clinical_significance": "Likely_pathogenic",
+      "associated_condition": "Hereditary leiomyomatosis and RCC"
+    },
+    {
+      "gene": "APOL1",
+      "variant_id": "rs73885319",
+      "hgvs_notation": "c.1024A>G (G1)",
+      "zygosity": "homozygous",
+      "clinical_significance": "risk_allele",
+      "associated_condition": "APOL1-mediated kidney disease"
+    },
+    {
+      "gene": "TP53",
+      "variant_id": "rs28934578",
+      "hgvs_notation": "c.524G>A (p.Arg175His)",
+      "zygosity": "heterozygous",
+      "clinical_significance": "pathogenic",
+      "associated_condition": "Li-Fraumeni syndrome"
+    },
+    {
+      "gene": "PBRM1",
+      "variant_id": "rs1456789012",
+      "hgvs_notation": "c.2134C>T (p.Pro712Ser)",
+      "zygosity": "heterozygous",
+      "clinical_significance": "Uncertain significance"
+    },
+    {
+      "gene": "MET",
+      "variant_id": "rs56391007",
+      "hgvs_notation": "c.3029C>T",
+      "zygosity": "heterozygous",
+      "clinical_significance": "Conflicting interpretations of pathogenicity"
+    },
+    {
+      "gene": "BAP1",
+      "variant_id": "rs776543210",
+      "hgvs_notation": "c.1892A>G",
+      "zygosity": "heterozygous",
+      "clinical_significance": "benign"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "study_uid": "1.2.826.0.1.3680043.8.498.10021",
+  "patient_id": "marco-r",
+  "modality": "CT",
+  "description": "CT abdomen with contrast - renal protocol (follow-up)",
+  "acquired": "2026-10-11T18:20:00Z",
+  "slice_thickness_mm": 1.25,
+  "series": 3,
+  "source": "Synthetic/public de-identified demo image (no real patient)",
+  "key_image": "/assets/ct.png",
+  "cached_inference": {
+    "model": "kidney-ct-cls v1 (Loop v1 pipeline)",
+    "label": "tumor",
+    "p_raw": 0.9999,
+    "cam_metrics": { "coverage": 0.0322, "center_ratio": 0.0495, "lr_asymmetry": 0.5446, "tb_asymmetry": 1.0 },
+    "heatmap": "/assets/heatmap.jpg"
+  }
+}
