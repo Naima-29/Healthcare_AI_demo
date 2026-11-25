@@ -9,6 +9,27 @@ dependencies = [
     "rfc8785>=0.1.4",
 ]
 
+[project.optional-dependencies]
+adapters = [
+    "nats-py>=2.7,<3",
+    "psycopg[binary]>=3.1,<4",
+    "psycopg-pool>=3.1,<4",
+    "httpx>=0.27,<1",
+]
+# everything the Core container runs: `pip install .[service]`
+# MCP SDK pinned below 2.0: 2.x renamed the server API (FastMCP -> MCPServer); migrate deliberately, not by accident.
+connectors = [
+    "kcd-core[adapters]",
+    "mcp>=1.9,<2",
+]
+service = [
+    "kcd-core[adapters,connectors]",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30",
+    "pydantic-settings>=2.4,<3",
+    "PyJWT[crypto]>=2.9,<3",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
@@ -37,6 +58,9 @@ extend-exclude = ["demo"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
 "core/kcd_core/chief_of_staff/patterns.py" = ["E501"]  # regexes ported verbatim from the demo

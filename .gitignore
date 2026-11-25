@@ -9,6 +9,7 @@ dist/
 .env
 *.pem
 *.key
+keys/
 
 # Model weights (never commit; see platform/kcd/imaging/MODEL_CARD_chrislin.md)
 models/
